@@ -1,6 +1,6 @@
 [package]
 name = "copier"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Copier Contributors"]
 description = "A bidirectional file content aggregator and extractor that converts between files and markdown-formatted representations"
@@ -24,7 +24,7 @@ pulldown-cmark = { version = "0.13", default-features = false, features = [
 serde = { version = "1.0", features = ["derive"] }
 serde_path_to_error = "0.1"
 strum = { version = "0.27", features = ["derive"] }
-thiserror = "1.0"
+thiserror = "2.0"
 toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
