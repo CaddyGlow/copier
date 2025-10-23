@@ -1,6 +1,6 @@
 use clap::Parser;
 use copier::analyze::{
-    LspClient, OutputFormat, SymbolIndex, SymbolInfo, TypeExtractor, TypeResolver,
+    LspClient, OutputFormat, RelativePath, SymbolIndex, SymbolInfo, TypeExtractor, TypeResolver,
     detect_project_root, extract_project_name, extract_symbols, get_formatter,
     get_lsp_server_with_config, has_lsp_support,
 };
@@ -64,7 +64,7 @@ fn collect_external_types(
                 } = &resolved_type.resolution
                 {
                     external_files
-                        .entry(path.clone())
+                        .entry(path.to_string())
                         .or_default()
                         .insert(resolved_type.type_name.clone());
                 }
@@ -816,7 +816,7 @@ fn run_diagnostics_single_file(args: &Args) -> Result<()> {
 
     // Build project diagnostics structure
     let file_diags = copier::analyze::FileDiagnostics {
-        file_path: relative_path,
+        file_path: RelativePath::from_string(relative_path),
         diagnostics,
     };
 
@@ -966,7 +966,7 @@ fn run_diagnostics_multiple_files(args: &Args) -> Result<()> {
                 .to_string();
 
             file_diagnostics.push(copier::analyze::FileDiagnostics {
-                file_path: relative_path,
+                file_path: RelativePath::from_string(relative_path),
                 diagnostics,
             });
         }

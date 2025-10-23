@@ -1,5 +1,6 @@
 use crate::analyze::ProjectType;
 use crate::analyze::extractor::{SymbolInfo, get_functions, get_types, get_variables};
+use crate::analyze::path_types::RelativePath;
 use crate::analyze::type_resolver::{ResolvedType, TypeResolution};
 use lsp_types::SymbolKind;
 use serde::Serialize;
@@ -19,7 +20,7 @@ pub enum OutputFormat {
 /// Diagnostics for a single file
 #[derive(Debug, Clone)]
 pub struct FileDiagnostics {
-    pub file_path: String,
+    pub file_path: RelativePath,
     pub diagnostics: Vec<lsp_types::Diagnostic>,
 }
 
@@ -34,7 +35,7 @@ pub struct ProjectDiagnostics {
 /// Type dependencies for a single file
 #[derive(Debug, Clone)]
 pub struct FileTypeDependencies {
-    pub file_path: String,
+    pub file_path: RelativePath,
     pub types: Vec<ResolvedType>,
 }
 
@@ -453,7 +454,7 @@ fn format_resolved_type(resolved: &ResolvedType) -> String {
             format!(
                 "- `{}` → defined in `{}:{}` ({})\n",
                 resolved.type_name,
-                file_path.display(),
+                file_path,
                 line,
                 kind
             )
@@ -541,7 +542,7 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
                     output.push_str(&format!(
                         "- `{}` → local: `{}:{}` ({})\n",
                         resolved_type.type_name,
-                        file_path.display(),
+                        file_path,
                         line + 1,
                         kind
                     ));
@@ -785,7 +786,7 @@ impl Formatter for JsonFormatter {
                             } => (
                                 "local",
                                 serde_json::json!({
-                                    "file": file_path.display().to_string(),
+                                    "file": file_path.to_string(),
                                     "line": line,
                                     "kind": kind,
                                 }),

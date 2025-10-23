@@ -1,4 +1,5 @@
 use super::lsp_client::LspClient;
+use super::path_types::FilePath;
 use super::symbol_index::{SymbolIndex, SymbolLocation};
 use super::type_extractor::{TypeContext, TypeReference};
 use std::collections::HashMap;
@@ -17,13 +18,13 @@ pub struct ResolvedType {
 pub enum TypeResolution {
     /// Type found in analyzed files (local)
     Local {
-        file_path: PathBuf,
+        file_path: FilePath,
         line: u32,
         kind: String,
     },
     /// Type found via LSP workspace search (external)
     External {
-        file_path: Option<String>,
+        file_path: Option<FilePath>,
         line: Option<u32>,
     },
     /// Type not found
@@ -93,7 +94,10 @@ impl<'a> TypeResolver<'a> {
                     // Extract location from GotoDefinitionResponse
                     if let Some((uri, range)) = Self::extract_first_location(response) {
                         return TypeResolution::External {
-                            file_path: uri.to_file_path().ok().map(|p| p.display().to_string()),
+                            file_path: uri
+                                .to_file_path()
+                                .ok()
+                                .map(|p| FilePath::from_absolute_unchecked(p)),
                             line: Some(range.start.line),
                         };
                     }
@@ -167,14 +171,14 @@ pub fn group_by_file(resolved_types: Vec<ResolvedType>) -> HashMap<PathBuf, Vec<
         match &resolved.resolution {
             TypeResolution::Local { file_path, .. } => {
                 by_file
-                    .entry(file_path.clone())
+                    .entry(file_path.clone().into_path_buf())
                     .or_default()
                     .push(resolved);
             }
             TypeResolution::External { file_path, .. } => {
                 if let Some(path) = file_path {
                     by_file
-                        .entry(PathBuf::from(path))
+                        .entry(path.clone().into_path_buf())
                         .or_default()
                         .push(resolved);
                 }
@@ -213,7 +217,7 @@ mod tests {
             type_dependencies: None,
         }];
 
-        let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];
+        let file_symbols = vec![(PathBuf::from("/test.rs"), symbols)];
         let index = SymbolIndex::build_from_symbols(&file_symbols);
         let resolver = TypeResolver::new(&index, false);
 

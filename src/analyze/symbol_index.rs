@@ -1,3 +1,4 @@
+use super::path_types::FilePath;
 use super::SymbolInfo;
 use lsp_types::SymbolKind;
 use std::collections::HashMap;
@@ -6,7 +7,7 @@ use std::path::{Path, PathBuf};
 /// Location where a symbol is defined
 #[derive(Debug, Clone)]
 pub struct SymbolLocation {
-    pub file_path: PathBuf,
+    pub file_path: FilePath,
     pub line_start: u32,
     pub line_end: u32,
     pub kind: String,
@@ -64,7 +65,7 @@ impl SymbolIndex {
 
         if is_type_definition || should_index_symbol(symbol.kind) {
             let location = SymbolLocation {
-                file_path: file_path.to_path_buf(),
+                file_path: FilePath::from_absolute_unchecked(file_path.to_path_buf()),
                 line_start: symbol.range.start.line,
                 line_end: symbol.range.end.line,
                 kind: symbol_kind_to_string(symbol.kind).to_string(),
@@ -179,7 +180,7 @@ mod tests {
             },
         ];
 
-        let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];
+        let file_symbols = vec![(PathBuf::from("/test.rs"), symbols)];
         let index = SymbolIndex::build_from_symbols(&file_symbols);
 
         assert_eq!(index.len(), 2);
@@ -224,7 +225,7 @@ mod tests {
             type_dependencies: None,
         }];
 
-        let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];
+        let file_symbols = vec![(PathBuf::from("/test.rs"), symbols)];
         let index = SymbolIndex::build_from_symbols(&file_symbols);
 
         // Should index the struct and its fields
