@@ -60,22 +60,21 @@ impl LspClient {
         }
 
         let mut child = command.spawn().map_err(|e| {
-            CopierError::Io(std::io::Error::other(
-                format!("Failed to spawn LSP server '{}': {}", server_cmd, e),
-            ))
+            CopierError::Io(std::io::Error::other(format!(
+                "Failed to spawn LSP server '{}': {}",
+                server_cmd, e
+            )))
         })?;
 
-        let stdin = child.stdin.take().ok_or_else(|| {
-            CopierError::Io(std::io::Error::other(
-                "Failed to capture stdin",
-            ))
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| CopierError::Io(std::io::Error::other("Failed to capture stdin")))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            CopierError::Io(std::io::Error::other(
-                "Failed to capture stdout",
-            ))
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| CopierError::Io(std::io::Error::other("Failed to capture stdout")))?;
 
         let transport = JsonRpcTransport::new(stdin, stdout);
 
@@ -135,9 +134,10 @@ impl LspClient {
         let response = self.transport.read_response()?;
 
         if let Some(error) = response.error {
-            return Err(CopierError::Io(std::io::Error::other(
-                format!("Initialize error: {}", error.message),
-            )));
+            return Err(CopierError::Io(std::io::Error::other(format!(
+                "Initialize error: {}",
+                error.message
+            ))));
         }
 
         let result: InitializeResult =
@@ -241,9 +241,10 @@ impl LspClient {
             );
 
             if let Some(error) = response.error {
-                return Err(CopierError::Io(std::io::Error::other(
-                    format!("documentSymbol error: {}", error.message),
-                )));
+                return Err(CopierError::Io(std::io::Error::other(format!(
+                    "documentSymbol error: {}",
+                    error.message
+                ))));
             }
 
             // Check if we have a result

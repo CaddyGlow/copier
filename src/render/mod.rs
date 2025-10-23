@@ -65,7 +65,11 @@ impl Fence {
             FencePreference::Backtick => '`',
             FencePreference::Tilde => '~',
             FencePreference::Auto => {
-                if content.contains("```") { '~' } else { '`' }
+                if content.contains("```") {
+                    '~'
+                } else {
+                    '`'
+                }
             }
         };
         Self::for_char(content, ch)

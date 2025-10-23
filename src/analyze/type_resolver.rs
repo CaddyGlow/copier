@@ -77,7 +77,8 @@ impl<'a> TypeResolver<'a> {
     ) -> TypeResolution {
         // First, check local symbol index (fast path)
         if let Some(locations) = self.symbol_index.lookup(&type_ref.type_name)
-            && let Some(location) = Self::find_best_match(locations, &type_ref.type_name) {
+            && let Some(location) = Self::find_best_match(locations, &type_ref.type_name)
+        {
             return TypeResolution::Local {
                 file_path: location.file_path.clone(),
                 line: location.line_start,
@@ -87,7 +88,8 @@ impl<'a> TypeResolver<'a> {
 
         // If not found locally and LSP is enabled, use typeDefinition
         if self.use_lsp
-            && let Some(client) = lsp_client {
+            && let Some(client) = lsp_client
+        {
             // Use the position from the TypeReference to request typeDefinition
             match client.type_definition(&type_ref.uri, type_ref.position) {
                 Ok(Some(response)) => {

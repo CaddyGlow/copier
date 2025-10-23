@@ -132,19 +132,23 @@ mod tests {
     fn test_sanitize_relative_absolute() {
         let result = sanitize_relative("/etc/passwd");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("absolute paths are not allowed"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("absolute paths are not allowed")
+        );
     }
 
     #[test]
     fn test_sanitize_relative_parent_dir() {
         let result = sanitize_relative("../etc/passwd");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("parent directory segments are not allowed"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("parent directory segments are not allowed")
+        );
     }
 }

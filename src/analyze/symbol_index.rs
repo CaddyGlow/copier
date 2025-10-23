@@ -1,5 +1,5 @@
-use super::path_types::FilePath;
 use super::SymbolInfo;
+use super::path_types::FilePath;
 use lsp_types::SymbolKind;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

@@ -40,4 +40,3 @@ fn write_output(config: &AggregateConfig, document: &str) -> Result<()> {
     }
     Ok(())
 }
-

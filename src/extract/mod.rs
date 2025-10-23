@@ -291,8 +291,7 @@ impl BlockState {
         // Priority order:
         // 1. Comment hint inside code block (most explicit)
         // 2. Path hint from heading or trailing text
-        let path = if let Some(comment_path) = path_hint::extract_comment_hint(&mut self.contents)
-        {
+        let path = if let Some(comment_path) = path_hint::extract_comment_hint(&mut self.contents) {
             comment_path
         } else if let Some(hint) = self.path_hint.take() {
             hint

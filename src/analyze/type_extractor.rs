@@ -148,12 +148,12 @@ impl TypeExtractor {
                 // Extract from field children
                 for child in &symbol.children {
                     if matches!(child.kind, SymbolKind::FIELD | SymbolKind::PROPERTY)
-                        && let Some(detail) = &child.detail {
+                        && let Some(detail) = &child.detail
+                    {
                         // Calculate where the type annotation starts (after field name and `: `)
                         let type_annotation_start = child.selection_range.end.character + 2;
 
-                        for (type_name, offset) in self.extract_type_names_with_offsets(detail)
-                        {
+                        for (type_name, offset) in self.extract_type_names_with_offsets(detail) {
                             // Position points to the type name within the annotation
                             let type_position = lsp_types::Position {
                                 line: child.selection_range.start.line,

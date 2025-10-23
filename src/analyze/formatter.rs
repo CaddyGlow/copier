@@ -453,10 +453,7 @@ fn format_resolved_type(resolved: &ResolvedType) -> String {
         } => {
             format!(
                 "- `{}` → defined in `{}:{}` ({})\n",
-                resolved.type_name,
-                file_path,
-                line,
-                kind
+                resolved.type_name, file_path, line, kind
             )
         }
         TypeResolution::External { file_path, line } => {
@@ -530,7 +527,8 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
 
     // Type dependencies
     if let Some(type_deps) = &symbol.type_dependencies
-        && !type_deps.is_empty() {
+        && !type_deps.is_empty()
+    {
         output.push_str("**Type Dependencies:**\n\n");
         for resolved_type in type_deps {
             match &resolved_type.resolution {
@@ -556,8 +554,7 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
                             line_num + 1
                         ));
                     } else {
-                        output
-                            .push_str(&format!("- `{}` → external\n", resolved_type.type_name));
+                        output.push_str(&format!("- `{}` → external\n", resolved_type.type_name));
                     }
                 }
                 TypeResolution::Unresolved => {

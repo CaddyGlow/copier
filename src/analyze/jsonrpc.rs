@@ -164,7 +164,8 @@ impl JsonRpcTransport {
                 // Handle publishDiagnostics notifications
                 if method == "textDocument/publishDiagnostics" {
                     if let Some(params) = json.get("params")
-                        && let Err(e) = self.handle_diagnostics_notification(params) {
+                        && let Err(e) = self.handle_diagnostics_notification(params)
+                    {
                         tracing::warn!("Failed to handle diagnostics: {}", e);
                     }
                     continue;
@@ -173,7 +174,8 @@ impl JsonRpcTransport {
                 // Handle progress notifications
                 if method == "$/progress" {
                     if let Some(params) = json.get("params")
-                        && let Err(e) = self.handle_progress_notification(params) {
+                        && let Err(e) = self.handle_progress_notification(params)
+                    {
                         tracing::warn!("Failed to handle progress: {}", e);
                     }
                     continue;

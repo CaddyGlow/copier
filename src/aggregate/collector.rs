@@ -9,9 +9,9 @@ use crate::config::{AggregateConfig, AppContext};
 use crate::error::{CopierError, Result};
 use crate::utils;
 
+use super::FileEntry;
 use super::glob_expansion;
 use super::walker_config::WalkerConfigBuilder;
-use super::FileEntry;
 
 /// Collects file entries based on the provided configuration.
 pub fn collect_entries(context: &AppContext, config: &AggregateConfig) -> Result<Vec<FileEntry>> {
@@ -71,7 +71,9 @@ fn collect_from_directory(
     excludes: Option<&GlobSet>,
     entries: &mut Vec<FileEntry>,
 ) -> Result<()> {
-    let walker = WalkerConfigBuilder::from_config(dir, config).build().build();
+    let walker = WalkerConfigBuilder::from_config(dir, config)
+        .build()
+        .build();
 
     for result in walker {
         let dir_entry = match result {
