@@ -200,14 +200,17 @@ mod tests {
 
     #[test]
     fn test_resolve_local_type() {
+        use lsp_types::{Position, Range};
+
         let symbols = vec![SymbolInfo {
             name: "MyStruct".to_string(),
-            kind: "Struct".to_string(),
-            line_start: 10,
-            line_end: 15,
+            kind: lsp_types::SymbolKind::STRUCT,
             detail: None,
             documentation: None,
-            children: None,
+            range: Range::new(Position::new(10, 0), Position::new(15, 0)),
+            selection_range: Range::new(Position::new(10, 0), Position::new(10, 8)),
+            children: vec![],
+            type_dependencies: None,
         }];
 
         let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];

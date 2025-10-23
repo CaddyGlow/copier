@@ -150,6 +150,8 @@ mod tests {
                 documentation: None,
                 range: Range::default(),
                 selection_range: Range::default(),
+                children: vec![],
+                type_dependencies: None,
             },
             SymbolInfo {
                 name: "Bar".to_string(),
@@ -158,6 +160,8 @@ mod tests {
                 documentation: None,
                 range: Range::default(),
                 selection_range: Range::default(),
+                children: vec![],
+                type_dependencies: None,
             },
         ];
 
@@ -176,6 +180,8 @@ mod tests {
                 documentation: None,
                 range: Range::default(),
                 selection_range: Range::default(),
+                children: vec![],
+                type_dependencies: None,
             },
             SymbolInfo {
                 name: "Bar".to_string(),
@@ -184,6 +190,8 @@ mod tests {
                 documentation: None,
                 range: Range::default(),
                 selection_range: Range::default(),
+                children: vec![],
+                type_dependencies: None,
             },
         ];
 

@@ -110,6 +110,8 @@ fn should_index_symbol(kind: SymbolKind) -> bool {
             | SymbolKind::TYPE_PARAMETER
             | SymbolKind::MODULE
             | SymbolKind::NAMESPACE
+            | SymbolKind::FIELD
+            | SymbolKind::ENUM_MEMBER
     )
 }
 
@@ -152,24 +154,28 @@ mod tests {
 
     #[test]
     fn test_symbol_index_basic() {
+        use lsp_types::{Position, Range};
+
         let symbols = vec![
             SymbolInfo {
                 name: "MyStruct".to_string(),
-                kind: "Struct".to_string(),
-                line_start: 10,
-                line_end: 15,
+                kind: SymbolKind::STRUCT,
                 detail: None,
                 documentation: None,
-                children: None,
+                range: Range::new(Position::new(10, 0), Position::new(15, 0)),
+                selection_range: Range::new(Position::new(10, 0), Position::new(10, 8)),
+                children: vec![],
+                type_dependencies: None,
             },
             SymbolInfo {
                 name: "MyEnum".to_string(),
-                kind: "Enum".to_string(),
-                line_start: 20,
-                line_end: 25,
+                kind: SymbolKind::ENUM,
                 detail: None,
                 documentation: None,
-                children: None,
+                range: Range::new(Position::new(20, 0), Position::new(25, 0)),
+                selection_range: Range::new(Position::new(20, 0), Position::new(20, 6)),
+                children: vec![],
+                type_dependencies: None,
             },
         ];
 
@@ -184,33 +190,38 @@ mod tests {
 
     #[test]
     fn test_symbol_index_with_children() {
+        use lsp_types::{Position, Range};
+
         let symbols = vec![SymbolInfo {
             name: "MyStruct".to_string(),
-            kind: "Struct".to_string(),
-            line_start: 10,
-            line_end: 15,
+            kind: SymbolKind::STRUCT,
             detail: None,
             documentation: None,
-            children: Some(vec![
+            range: Range::new(Position::new(10, 0), Position::new(15, 0)),
+            selection_range: Range::new(Position::new(10, 0), Position::new(10, 8)),
+            children: vec![
                 SymbolInfo {
                     name: "field1".to_string(),
-                    kind: "Field".to_string(),
-                    line_start: 11,
-                    line_end: 11,
+                    kind: SymbolKind::FIELD,
                     detail: Some("String".to_string()),
                     documentation: None,
-                    children: None,
+                    range: Range::new(Position::new(11, 0), Position::new(11, 0)),
+                    selection_range: Range::new(Position::new(11, 0), Position::new(11, 6)),
+                    children: vec![],
+                    type_dependencies: None,
                 },
                 SymbolInfo {
                     name: "field2".to_string(),
-                    kind: "Field".to_string(),
-                    line_start: 12,
-                    line_end: 12,
+                    kind: SymbolKind::FIELD,
                     detail: Some("i32".to_string()),
                     documentation: None,
-                    children: None,
+                    range: Range::new(Position::new(12, 0), Position::new(12, 0)),
+                    selection_range: Range::new(Position::new(12, 0), Position::new(12, 6)),
+                    children: vec![],
+                    type_dependencies: None,
                 },
-            ]),
+            ],
+            type_dependencies: None,
         }];
 
         let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];

@@ -868,6 +868,7 @@ mod tests {
             range: Range::default(),
             selection_range: Range::default(),
             children: vec![],
+            type_dependencies: None,
         }
     }
 
