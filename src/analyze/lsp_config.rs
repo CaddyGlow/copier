@@ -98,6 +98,27 @@ pub fn get_language_id(project_type: ProjectType) -> &'static str {
     }
 }
 
+/// Map file extension to ProjectType
+/// Returns None if the extension doesn't have LSP support
+pub fn extension_to_project_type(extension: &str) -> Option<ProjectType> {
+    match extension.to_lowercase().as_str() {
+        "rs" => Some(ProjectType::Rust),
+        "py" | "pyi" => Some(ProjectType::Python),
+        "js" | "jsx" | "mjs" | "cjs" => Some(ProjectType::JavaScript),
+        "ts" | "tsx" | "mts" | "cts" => Some(ProjectType::TypeScript),
+        "go" => Some(ProjectType::Go),
+        _ => None,
+    }
+}
+
+/// Check if a file has LSP support based on its extension
+pub fn has_lsp_support(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .and_then(extension_to_project_type)
+        .is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

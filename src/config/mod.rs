@@ -314,4 +314,6 @@ pub struct AnalyzeSection {
     pub lsp_servers: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub bin_paths: Vec<String>,
+    #[serde(default)]
+    pub lsp_readiness_timeout_secs: Option<u64>,
 }
