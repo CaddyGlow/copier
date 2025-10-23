@@ -1,5 +1,5 @@
-use super::project_root::ProjectType;
 use super::SymbolInfo;
+use super::project_root::ProjectType;
 use regex::Regex;
 use std::collections::HashSet;
 
@@ -8,9 +8,9 @@ use std::collections::HashSet;
 pub struct TypeReference {
     pub type_name: String,
     pub context: TypeContext,
-    pub position: lsp_types::Position,  // Position in the source file where the type is referenced
-    pub uri: lsp_types::Url,            // URI of the file containing the reference
-    pub char_offset: Option<u32>,       // Character offset within the type annotation (for generics)
+    pub position: lsp_types::Position, // Position in the source file where the type is referenced
+    pub uri: lsp_types::Url,           // URI of the file containing the reference
+    pub char_offset: Option<u32>,      // Character offset within the type annotation (for generics)
 }
 
 /// Context where a type is used
@@ -49,12 +49,26 @@ impl TypeExtractor {
         match symbol.kind {
             SymbolKind::FUNCTION | SymbolKind::METHOD => {
                 // Log what children we have for debugging
-                tracing::debug!("Function '{}' detail: {:?}, doc: {:?}", symbol.name, symbol.detail, symbol.documentation);
+                tracing::debug!(
+                    "Function '{}' detail: {:?}, doc: {:?}",
+                    symbol.name,
+                    symbol.detail,
+                    symbol.documentation
+                );
                 if !symbol.children.is_empty() {
-                    tracing::debug!("Function '{}' has {} children", symbol.name, symbol.children.len());
+                    tracing::debug!(
+                        "Function '{}' has {} children",
+                        symbol.name,
+                        symbol.children.len()
+                    );
                     for child in &symbol.children {
-                        tracing::debug!("  Child: {} (kind: {:?}, detail: {:?}, doc: {:?})",
-                            child.name, child.kind, child.detail, child.documentation.as_ref().map(|d| &d[..d.len().min(100)]));
+                        tracing::debug!(
+                            "  Child: {} (kind: {:?}, detail: {:?}, doc: {:?})",
+                            child.name,
+                            child.kind,
+                            child.detail,
+                            child.documentation.as_ref().map(|d| &d[..d.len().min(100)])
+                        );
                     }
                 }
 
@@ -62,17 +76,21 @@ impl TypeExtractor {
                 // Different LSPs use different SymbolKinds for parameters
                 for child in &symbol.children {
                     // Check if this is a parameter (not a nested function/class)
-                    let is_likely_parameter = matches!(
-                        child.kind,
-                        SymbolKind::VARIABLE | SymbolKind::CONSTANT
-                    ) && !matches!(child.kind, SymbolKind::FUNCTION | SymbolKind::METHOD | SymbolKind::CLASS);
+                    let is_likely_parameter =
+                        matches!(child.kind, SymbolKind::VARIABLE | SymbolKind::CONSTANT)
+                            && !matches!(
+                                child.kind,
+                                SymbolKind::FUNCTION | SymbolKind::METHOD | SymbolKind::CLASS
+                            );
 
                     if !is_likely_parameter {
                         continue;
                     }
 
                     // Try to get type from detail field first (Rust, TypeScript)
-                    let type_from_detail = child.detail.as_ref()
+                    let type_from_detail = child
+                        .detail
+                        .as_ref()
                         .filter(|d| !d.is_empty())
                         .map(|d| d.to_string());
 
@@ -87,8 +105,17 @@ impl TypeExtractor {
                     if let Some(type_str) = type_source {
                         // Extract type names and use child's position
                         for type_name in self.extract_type_names(&type_str) {
-                            tracing::debug!("  Extracted parameter type '{}' from {}", type_name,
-                                if child.detail.is_some() && !child.detail.as_ref().unwrap().is_empty() { "detail" } else { "hover" });
+                            tracing::debug!(
+                                "  Extracted parameter type '{}' from {}",
+                                type_name,
+                                if child.detail.is_some()
+                                    && !child.detail.as_ref().unwrap().is_empty()
+                                {
+                                    "detail"
+                                } else {
+                                    "hover"
+                                }
+                            );
                             types.push(TypeReference {
                                 type_name,
                                 context: TypeContext::FunctionParameter,
@@ -102,16 +129,19 @@ impl TypeExtractor {
 
                 // Extract return type from detail string if available (Rust, TypeScript)
                 // Or from documentation/hover (Python)
-                let return_type_source = symbol.detail.clone()
-                    .or_else(|| {
-                        symbol.documentation.as_ref().and_then(|doc| {
-                            // Python hover format: "(function) def name(...) -> ReturnType"
-                            self.extract_return_type_from_hover_docs(doc)
-                        })
-                    });
+                let return_type_source = symbol.detail.clone().or_else(|| {
+                    symbol.documentation.as_ref().and_then(|doc| {
+                        // Python hover format: "(function) def name(...) -> ReturnType"
+                        self.extract_return_type_from_hover_docs(doc)
+                    })
+                });
 
                 if let Some(signature) = return_type_source {
-                    types.extend(self.extract_return_type_from_signature(&signature, &symbol.selection_range, uri));
+                    types.extend(self.extract_return_type_from_signature(
+                        &signature,
+                        &symbol.selection_range,
+                        uri,
+                    ));
                 }
             }
             SymbolKind::STRUCT | SymbolKind::CLASS => {
@@ -122,7 +152,8 @@ impl TypeExtractor {
                             // Calculate where the type annotation starts (after field name and `: `)
                             let type_annotation_start = child.selection_range.end.character + 2;
 
-                            for (type_name, offset) in self.extract_type_names_with_offsets(detail) {
+                            for (type_name, offset) in self.extract_type_names_with_offsets(detail)
+                            {
                                 // Position points to the type name within the annotation
                                 let type_position = lsp_types::Position {
                                     line: child.selection_range.start.line,
@@ -188,7 +219,12 @@ impl TypeExtractor {
 
     /// Extract return type from function signature
     /// Uses the function's range to estimate the position of the return type
-    fn extract_return_type_from_signature(&self, detail: &str, range: &lsp_types::Range, uri: &lsp_types::Url) -> Vec<TypeReference> {
+    fn extract_return_type_from_signature(
+        &self,
+        detail: &str,
+        range: &lsp_types::Range,
+        uri: &lsp_types::Url,
+    ) -> Vec<TypeReference> {
         let mut types = Vec::new();
 
         // Extract return type based on language
@@ -233,7 +269,7 @@ impl TypeExtractor {
                     ""
                 }
             }
-            ProjectType::Unknown => ""
+            ProjectType::Unknown => "",
         };
 
         if !return_type_str.is_empty() {
@@ -263,7 +299,8 @@ impl TypeExtractor {
             if let Some(colon_pos) = after_param.find(':') {
                 let after_colon = &after_param[colon_pos + 1..].trim_start();
                 // Extract until newline or backticks
-                let end_pos = after_colon.find('\n')
+                let end_pos = after_colon
+                    .find('\n')
                     .or_else(|| after_colon.find('`'))
                     .unwrap_or(after_colon.len());
                 let type_str = after_colon[..end_pos].trim();
@@ -283,8 +320,14 @@ impl TypeExtractor {
             // Return the whole line containing the function signature
             // The extract_return_type_from_signature will parse it
             if let Some(def_start) = hover_docs.find("def ") {
-                let line_end = hover_docs[def_start..].find('\n').unwrap_or(hover_docs.len() - def_start);
-                return Some(hover_docs[def_start..def_start + line_end].trim().to_string());
+                let line_end = hover_docs[def_start..]
+                    .find('\n')
+                    .unwrap_or(hover_docs.len() - def_start);
+                return Some(
+                    hover_docs[def_start..def_start + line_end]
+                        .trim()
+                        .to_string(),
+                );
             }
         }
         None
@@ -300,7 +343,8 @@ impl TypeExtractor {
         let re = match self.project_type {
             ProjectType::Python => {
                 // Python: match lowercase identifiers and dotted paths (e.g., typing.List)
-                Regex::new(r"([a-z_][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)*|[A-Z][a-zA-Z0-9_]*)").unwrap()
+                Regex::new(r"([a-z_][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)*|[A-Z][a-zA-Z0-9_]*)")
+                    .unwrap()
             }
             _ => {
                 // Rust/TypeScript/Go: match uppercase identifiers and :: paths
@@ -329,7 +373,11 @@ impl TypeExtractor {
             }
         }
 
-        tracing::debug!("Extracted type names with offsets from '{}': {:?}", type_expr, types);
+        tracing::debug!(
+            "Extracted type names with offsets from '{}': {:?}",
+            type_expr,
+            types
+        );
         types
     }
 
@@ -356,8 +404,8 @@ impl TypeExtractor {
                 types.extend(vec![
                     "bool", "char", "str", "String", "i8", "i16", "i32", "i64", "i128", "isize",
                     "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "Vec", "Option",
-                    "Result", "Box", "Rc", "Arc", "RefCell", "Cell", "Mutex", "RwLock",
-                    "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Path", "PathBuf",
+                    "Result", "Box", "Rc", "Arc", "RefCell", "Cell", "Mutex", "RwLock", "HashMap",
+                    "HashSet", "BTreeMap", "BTreeSet", "Path", "PathBuf",
                 ]);
             }
             ProjectType::TypeScript | ProjectType::JavaScript => {
@@ -410,9 +458,25 @@ impl TypeExtractor {
             }
             ProjectType::Go => {
                 types.extend(vec![
-                    "bool", "byte", "rune", "int", "int8", "int16", "int32", "int64", "uint",
-                    "uint8", "uint16", "uint32", "uint64", "float32", "float64", "complex64",
-                    "complex128", "string", "error",
+                    "bool",
+                    "byte",
+                    "rune",
+                    "int",
+                    "int8",
+                    "int16",
+                    "int32",
+                    "int64",
+                    "uint",
+                    "uint8",
+                    "uint16",
+                    "uint32",
+                    "uint64",
+                    "float32",
+                    "float64",
+                    "complex64",
+                    "complex128",
+                    "string",
+                    "error",
                 ]);
             }
             ProjectType::Unknown => {}

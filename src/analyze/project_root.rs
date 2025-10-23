@@ -17,12 +17,12 @@ pub fn detect_project_root(file_path: &Path) -> Result<(PathBuf, ProjectType)> {
     let canonical_path = file_path.canonicalize().map_err(CopierError::Io)?;
 
     let start_dir = if canonical_path.is_file() {
-        canonical_path
-            .parent()
-            .ok_or_else(|| CopierError::Io(std::io::Error::new(
+        canonical_path.parent().ok_or_else(|| {
+            CopierError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Cannot determine parent directory",
-            )))?
+            ))
+        })?
     } else {
         &canonical_path
     };
@@ -50,15 +50,13 @@ pub fn detect_project_root(file_path: &Path) -> Result<(PathBuf, ProjectType)> {
 
 /// Detect project type from file extension
 fn detect_type_from_extension(file_path: &Path) -> Option<ProjectType> {
-    file_path.extension().and_then(|ext| {
-        match ext.to_str()? {
-            "rs" => Some(ProjectType::Rust),
-            "py" => Some(ProjectType::Python),
-            "ts" | "tsx" => Some(ProjectType::TypeScript),
-            "js" | "jsx" => Some(ProjectType::JavaScript),
-            "go" => Some(ProjectType::Go),
-            _ => None,
-        }
+    file_path.extension().and_then(|ext| match ext.to_str()? {
+        "rs" => Some(ProjectType::Rust),
+        "py" => Some(ProjectType::Python),
+        "ts" | "tsx" => Some(ProjectType::TypeScript),
+        "js" | "jsx" => Some(ProjectType::JavaScript),
+        "go" => Some(ProjectType::Go),
+        _ => None,
     })
 }
 
@@ -125,15 +123,21 @@ fn extract_from_pyproject_toml(root_path: &Path) -> Option<String> {
     let parsed: toml::Value = toml::from_str(&content).ok()?;
 
     // Try [project].name first (PEP 621 standard)
-    if let Some(name) = parsed.get("project").and_then(|p| p.get("name")).and_then(|n| n.as_str()) {
+    if let Some(name) = parsed
+        .get("project")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+    {
         return Some(name.to_string());
     }
 
     // Try [tool.poetry].name (Poetry)
-    if let Some(name) = parsed.get("tool")
+    if let Some(name) = parsed
+        .get("tool")
         .and_then(|t| t.get("poetry"))
         .and_then(|p| p.get("name"))
-        .and_then(|n| n.as_str()) {
+        .and_then(|n| n.as_str())
+    {
         return Some(name.to_string());
     }
 

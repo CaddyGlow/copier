@@ -25,7 +25,10 @@ pub fn extract_symbols(client: &mut LspClient, uri: &Url) -> Result<Vec<SymbolIn
         DocumentSymbolResponse::Flat(symbol_info_vec) => {
             // Handle flat SymbolInformation response
             for symbol in symbol_info_vec {
-                let hover = client.hover(uri, symbol.location.range.start).ok().flatten();
+                let hover = client
+                    .hover(uri, symbol.location.range.start)
+                    .ok()
+                    .flatten();
 
                 symbols.push(SymbolInfo {
                     name: symbol.name,
@@ -56,7 +59,10 @@ fn convert_document_symbol(
     uri: &Url,
     symbol: DocumentSymbol,
 ) -> Result<SymbolInfo> {
-    let hover = client.hover(uri, symbol.selection_range.start).ok().flatten();
+    let hover = client
+        .hover(uri, symbol.selection_range.start)
+        .ok()
+        .flatten();
 
     let mut children = Vec::new();
     if let Some(child_symbols) = symbol.children {

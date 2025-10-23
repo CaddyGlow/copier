@@ -1,6 +1,10 @@
 mod language;
 
+use std::fs;
+
 use camino::{Utf8Path, Utf8PathBuf};
+
+use crate::error::Result;
 
 pub use language::language_for_path;
 
@@ -38,4 +42,19 @@ pub fn is_probably_binary(data: &[u8]) -> bool {
         .count();
 
     control_count > sample.len() / 10
+}
+
+/// Ensure parent directories exist for the given path
+pub fn ensure_parent(path: &Utf8Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent.as_std_path())?;
+    }
+    Ok(())
+}
+
+/// Write data to a file, creating parent directories if needed
+pub fn write_with_parent(path: &Utf8Path, data: &[u8]) -> Result<()> {
+    ensure_parent(path)?;
+    fs::write(path.as_std_path(), data)?;
+    Ok(())
 }

@@ -4,7 +4,6 @@ pub mod cli;
 pub mod config;
 pub mod error;
 pub mod extract;
-pub mod fs;
 pub mod render;
 pub mod telemetry;
 pub mod utils;

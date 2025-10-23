@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fs;
 use std::io::Write;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -9,7 +10,6 @@ use tracing::{debug, warn};
 
 use crate::config::{AggregateConfig, AppContext};
 use crate::error::{CopierError, Result};
-use crate::fs;
 use crate::render;
 use crate::utils;
 
@@ -30,7 +30,7 @@ pub fn run(context: &AppContext, config: AggregateConfig) -> Result<()> {
     let document = document?;
 
     if let Some(output) = &config.output {
-        fs::write(output, document.as_bytes())?;
+        utils::write_with_parent(output, document.as_bytes())?;
         debug!(path = %output, "wrote aggregated markdown");
     } else {
         let mut stdout = std::io::stdout().lock();
@@ -53,7 +53,7 @@ fn collect_entries(context: &AppContext, config: &AggregateConfig) -> Result<Vec
 
     let mut entries = Vec::new();
     for path in paths {
-        let metadata = fs::metadata(&path)?;
+        let metadata = fs::metadata(path.as_std_path())?;
         if metadata.is_dir() {
             walk_directory(&path, context, config, excludes.as_ref(), &mut entries)?;
         } else if metadata.is_file() {
@@ -143,7 +143,7 @@ fn maybe_push_entry(
         // ensure we do not skip hidden files; already handled by walker
     }
 
-    let bytes = fs::read(path)?;
+    let bytes = fs::read(path.as_std_path())?;
     if utils::is_probably_binary(&bytes) {
         warn!(path = %path, "skipping binary file");
         return Ok(());

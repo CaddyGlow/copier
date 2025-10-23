@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::{self, IsTerminal, Read};
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -7,7 +8,7 @@ use tracing::{info, warn};
 
 use crate::config::{AppContext, ConflictStrategy, ExtractConfig, InputSource};
 use crate::error::{CopierError, Result};
-use crate::fs;
+use crate::utils;
 
 pub fn run(_context: &AppContext, config: ExtractConfig) -> Result<()> {
     let markdown = read_input(&config.source)?;
@@ -29,7 +30,8 @@ struct FileBlock {
 
 fn read_input(source: &InputSource) -> Result<String> {
     match source {
-        InputSource::File(path) => fs::read_to_string(path),
+        InputSource::File(path) => fs::read_to_string(path.as_std_path())
+            .map_err(|e| CopierError::Io(io::Error::new(e.kind(), format!("{}: {}", path, e)))),
         InputSource::Stdin => {
             let mut buf = String::new();
             io::stdin().read_to_string(&mut buf)?;
@@ -347,7 +349,7 @@ fn write_block(config: &ExtractConfig, block: &FileBlock) -> Result<()> {
         return Ok(());
     }
 
-    fs::write(&destination, block.contents.as_bytes())?;
+    utils::write_with_parent(&destination, block.contents.as_bytes())?;
     info!(path = %destination, "wrote file");
     Ok(())
 }

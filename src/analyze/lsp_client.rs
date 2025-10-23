@@ -141,18 +141,19 @@ impl LspClient {
             )));
         }
 
-        let result: InitializeResult = serde_json::from_value(response.result.ok_or_else(|| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Missing initialize result",
-            ))
-        })?)
-        .map_err(|e| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to parse initialize result: {}", e),
-            ))
-        })?;
+        let result: InitializeResult =
+            serde_json::from_value(response.result.ok_or_else(|| {
+                CopierError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Missing initialize result",
+                ))
+            })?)
+            .map_err(|e| {
+                CopierError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to parse initialize result: {}", e),
+                ))
+            })?;
 
         // Send initialized notification
         self.transport
@@ -229,11 +230,16 @@ impl LspClient {
                 .send_request("textDocument/documentSymbol", params_value)?;
             let response = self.transport.read_response()?;
 
-            tracing::debug!("documentSymbol response (attempt {}): has_error={}, has_result={}, result_is_null={}",
+            tracing::debug!(
+                "documentSymbol response (attempt {}): has_error={}, has_result={}, result_is_null={}",
                 attempt + 1,
                 response.error.is_some(),
                 response.result.is_some(),
-                response.result.as_ref().map(|r| r.is_null()).unwrap_or(false)
+                response
+                    .result
+                    .as_ref()
+                    .map(|r| r.is_null())
+                    .unwrap_or(false)
             );
 
             if let Some(error) = response.error {
@@ -248,19 +254,25 @@ impl LspClient {
                 // Check if it's null
                 if result_value.is_null() {
                     if attempt < max_retries - 1 {
-                        tracing::debug!("documentSymbol returned null, retrying in {:?}...", retry_delay);
+                        tracing::debug!(
+                            "documentSymbol returned null, retrying in {:?}...",
+                            retry_delay
+                        );
                         std::thread::sleep(retry_delay);
                         continue;
                     } else {
                         // Return empty on final retry
-                        tracing::warn!("documentSymbol returned null after {} retries", max_retries);
+                        tracing::warn!(
+                            "documentSymbol returned null after {} retries",
+                            max_retries
+                        );
                         return Ok(DocumentSymbolResponse::Nested(vec![]));
                     }
                 }
 
                 // Try to parse the result
-                let result: DocumentSymbolResponse = serde_json::from_value(result_value)
-                    .map_err(|e| {
+                let result: DocumentSymbolResponse =
+                    serde_json::from_value(result_value).map_err(|e| {
                         CopierError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!("Failed to parse documentSymbol result: {}", e),
@@ -271,13 +283,19 @@ impl LspClient {
             } else {
                 // No result field
                 if attempt < max_retries - 1 {
-                    tracing::debug!("documentSymbol missing result, retrying in {:?}...", retry_delay);
+                    tracing::debug!(
+                        "documentSymbol missing result, retrying in {:?}...",
+                        retry_delay
+                    );
                     std::thread::sleep(retry_delay);
                     continue;
                 } else {
                     return Err(CopierError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("Missing documentSymbol result after {} retries", max_retries),
+                        format!(
+                            "Missing documentSymbol result after {} retries",
+                            max_retries
+                        ),
                     )));
                 }
             }
@@ -389,7 +407,11 @@ impl LspClient {
     }
 
     /// Get type definition at a position
-    pub fn type_definition(&mut self, uri: &Url, position: Position) -> Result<Option<GotoDefinitionResponse>> {
+    pub fn type_definition(
+        &mut self,
+        uri: &Url,
+        position: Position,
+    ) -> Result<Option<GotoDefinitionResponse>> {
         if !self.initialized {
             return Err(CopierError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -428,8 +450,8 @@ impl LspClient {
             }
 
             // The response can be Location | Location[] | LocationLink[]
-            let goto_response: GotoDefinitionResponse = serde_json::from_value(result)
-                .map_err(|e| {
+            let goto_response: GotoDefinitionResponse =
+                serde_json::from_value(result).map_err(|e| {
                     CopierError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Failed to parse typeDefinition result: {}", e),
@@ -462,7 +484,10 @@ impl LspClient {
 
     /// Collect diagnostics from the LSP server
     /// Waits for the specified timeout to allow diagnostics to arrive
-    pub fn collect_diagnostics(&mut self, timeout_ms: u64) -> Result<std::collections::HashMap<Url, Vec<lsp_types::Diagnostic>>> {
+    pub fn collect_diagnostics(
+        &mut self,
+        timeout_ms: u64,
+    ) -> Result<std::collections::HashMap<Url, Vec<lsp_types::Diagnostic>>> {
         tracing::info!("Waiting {}ms for diagnostics to arrive...", timeout_ms);
 
         // Sleep to allow LSP server to send diagnostics notifications
@@ -471,7 +496,10 @@ impl LspClient {
         // Take all diagnostics that arrived
         let diagnostics_by_uri = self.transport.take_diagnostics();
 
-        tracing::info!("Collected diagnostics for {} file(s)", diagnostics_by_uri.len());
+        tracing::info!(
+            "Collected diagnostics for {} file(s)",
+            diagnostics_by_uri.len()
+        );
 
         // Convert String URIs to Url type
         let mut result = std::collections::HashMap::new();
@@ -496,7 +524,10 @@ impl LspClient {
             )));
         }
 
-        tracing::info!("Waiting for LSP server to complete indexing (timeout: {}s)...", timeout_secs);
+        tracing::info!(
+            "Waiting for LSP server to complete indexing (timeout: {}s)...",
+            timeout_secs
+        );
 
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
@@ -525,12 +556,25 @@ impl LspClient {
                     for (_token, state) in progress_states.iter() {
                         match state {
                             crate::analyze::jsonrpc::ProgressState::Begin { title, message } => {
-                                tracing::info!("  Progress: {} - {}", title, message.as_deref().unwrap_or(""));
+                                tracing::info!(
+                                    "  Progress: {} - {}",
+                                    title,
+                                    message.as_deref().unwrap_or("")
+                                );
                             }
-                            crate::analyze::jsonrpc::ProgressState::Report { message, percentage } => {
+                            crate::analyze::jsonrpc::ProgressState::Report {
+                                message,
+                                percentage,
+                            } => {
                                 if let Some(pct) = percentage {
-                                    tracing::info!("  Progress: {}%{}", pct,
-                                        message.as_ref().map(|m| format!(" - {}", m)).unwrap_or_default());
+                                    tracing::info!(
+                                        "  Progress: {}%{}",
+                                        pct,
+                                        message
+                                            .as_ref()
+                                            .map(|m| format!(" - {}", m))
+                                            .unwrap_or_default()
+                                    );
                                 }
                             }
                             crate::analyze::jsonrpc::ProgressState::End { message } => {

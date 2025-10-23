@@ -58,10 +58,7 @@ pub fn get_lsp_server_with_config(
         }
 
         ProjectType::TypeScript | ProjectType::JavaScript => {
-            LspServerConfig::new(
-                "typescript-language-server",
-                vec!["--stdio".to_string()],
-            )
+            LspServerConfig::new("typescript-language-server", vec!["--stdio".to_string()])
         }
 
         ProjectType::Go => LspServerConfig::new("gopls", vec![]),

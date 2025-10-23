@@ -54,7 +54,8 @@ impl<'a> TypeResolver<'a> {
         let mut lsp_cache: HashMap<String, Vec<lsp_types::SymbolInformation>> = HashMap::new();
 
         for type_ref in type_refs {
-            let resolution = self.resolve_single_type(type_ref, lsp_client.as_deref_mut(), &mut lsp_cache);
+            let resolution =
+                self.resolve_single_type(type_ref, lsp_client.as_deref_mut(), &mut lsp_cache);
 
             resolved.push(ResolvedType {
                 type_name: type_ref.type_name.clone(),
@@ -99,10 +100,18 @@ impl<'a> TypeResolver<'a> {
                         }
                     }
                     Ok(None) => {
-                        tracing::debug!("No typeDefinition found for '{}' at {:?}", type_ref.type_name, type_ref.position);
+                        tracing::debug!(
+                            "No typeDefinition found for '{}' at {:?}",
+                            type_ref.type_name,
+                            type_ref.position
+                        );
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to query typeDefinition for '{}': {}", type_ref.type_name, e);
+                        tracing::warn!(
+                            "Failed to query typeDefinition for '{}': {}",
+                            type_ref.type_name,
+                            e
+                        );
                     }
                 }
             }
@@ -130,19 +139,19 @@ impl<'a> TypeResolver<'a> {
 
     /// Extract the first location from a GotoDefinitionResponse
     /// GotoDefinitionResponse can be Location, Location[], or LocationLink[]
-    fn extract_first_location(response: lsp_types::GotoDefinitionResponse) -> Option<(lsp_types::Url, lsp_types::Range)> {
+    fn extract_first_location(
+        response: lsp_types::GotoDefinitionResponse,
+    ) -> Option<(lsp_types::Url, lsp_types::Range)> {
         use lsp_types::GotoDefinitionResponse;
 
         match response {
-            GotoDefinitionResponse::Scalar(location) => {
-                Some((location.uri, location.range))
-            }
+            GotoDefinitionResponse::Scalar(location) => Some((location.uri, location.range)),
             GotoDefinitionResponse::Array(locations) => {
                 locations.first().map(|loc| (loc.uri.clone(), loc.range))
             }
-            GotoDefinitionResponse::Link(links) => {
-                links.first().map(|link| (link.target_uri.clone(), link.target_selection_range))
-            }
+            GotoDefinitionResponse::Link(links) => links
+                .first()
+                .map(|link| (link.target_uri.clone(), link.target_selection_range)),
         }
     }
 }
@@ -188,22 +197,20 @@ pub fn group_by_file(resolved_types: Vec<ResolvedType>) -> HashMap<PathBuf, Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyze::symbol_index::SymbolIndex;
     use crate::analyze::SymbolInfo;
+    use crate::analyze::symbol_index::SymbolIndex;
 
     #[test]
     fn test_resolve_local_type() {
-        let symbols = vec![
-            SymbolInfo {
-                name: "MyStruct".to_string(),
-                kind: "Struct".to_string(),
-                line_start: 10,
-                line_end: 15,
-                detail: None,
-                documentation: None,
-                children: None,
-            },
-        ];
+        let symbols = vec![SymbolInfo {
+            name: "MyStruct".to_string(),
+            kind: "Struct".to_string(),
+            line_start: 10,
+            line_end: 15,
+            detail: None,
+            documentation: None,
+            children: None,
+        }];
 
         let file_symbols = vec![(PathBuf::from("test.rs"), symbols)];
         let index = SymbolIndex::build_from_symbols(&file_symbols);
@@ -212,7 +219,10 @@ mod tests {
         let type_refs = vec![TypeReference {
             type_name: "MyStruct".to_string(),
             context: TypeContext::FunctionParameter,
-            position: lsp_types::Position { line: 0, character: 0 },
+            position: lsp_types::Position {
+                line: 0,
+                character: 0,
+            },
             uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
             char_offset: None,
         }];
@@ -235,7 +245,10 @@ mod tests {
         let type_refs = vec![TypeReference {
             type_name: "UnknownType".to_string(),
             context: TypeContext::FunctionParameter,
-            position: lsp_types::Position { line: 0, character: 0 },
+            position: lsp_types::Position {
+                line: 0,
+                character: 0,
+            },
             uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
             char_offset: None,
         }];
@@ -243,9 +256,6 @@ mod tests {
         let resolved = resolver.resolve_types(&type_refs, None);
 
         assert_eq!(resolved.len(), 1);
-        assert!(matches!(
-            resolved[0].resolution,
-            TypeResolution::Unresolved
-        ));
+        assert!(matches!(resolved[0].resolution, TypeResolution::Unresolved));
     }
 }

@@ -28,9 +28,7 @@ impl SymbolIndex {
     }
 
     /// Build index from collected symbols
-    pub fn build_from_symbols(
-        file_symbols: &[(PathBuf, Vec<SymbolInfo>)],
-    ) -> Self {
+    pub fn build_from_symbols(file_symbols: &[(PathBuf, Vec<SymbolInfo>)]) -> Self {
         let mut index = Self::new();
 
         for (file_path, symbols) in file_symbols {

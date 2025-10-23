@@ -60,9 +60,17 @@ pub struct JsonRpcError {
 /// Progress tracking state
 #[derive(Debug, Clone)]
 pub enum ProgressState {
-    Begin { title: String, message: Option<String> },
-    Report { message: Option<String>, percentage: Option<u32> },
-    End { message: Option<String> },
+    Begin {
+        title: String,
+        message: Option<String>,
+    },
+    Report {
+        message: Option<String>,
+        percentage: Option<u32>,
+    },
+    End {
+        message: Option<String>,
+    },
 }
 
 /// JSON-RPC 2.0 transport over stdio
@@ -91,7 +99,11 @@ impl JsonRpcTransport {
     }
 
     /// Send a request and return the request ID
-    pub fn send_request(&mut self, method: impl Into<String>, params: serde_json::Value) -> Result<u64> {
+    pub fn send_request(
+        &mut self,
+        method: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Result<u64> {
         let id = self.next_id();
         let request = JsonRpcRequest::new(id, method, params);
         self.write_message(&request)?;
@@ -99,7 +111,11 @@ impl JsonRpcTransport {
     }
 
     /// Send a notification (no response expected)
-    pub fn send_notification(&mut self, method: impl Into<String>, params: serde_json::Value) -> Result<()> {
+    pub fn send_notification(
+        &mut self,
+        method: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Result<()> {
         let notification = JsonRpcNotification::new(method, params);
         self.write_message(&notification)?;
         Ok(())
@@ -128,7 +144,9 @@ impl JsonRpcTransport {
                 })?;
 
             let mut content = vec![0u8; content_length];
-            self.stdout.read_exact(&mut content).map_err(CopierError::Io)?;
+            self.stdout
+                .read_exact(&mut content)
+                .map_err(CopierError::Io)?;
 
             // Parse as generic JSON first to check if it's a notification or response
             let json: serde_json::Value = serde_json::from_slice(&content).map_err(|e| {
@@ -166,7 +184,11 @@ impl JsonRpcTransport {
                 // Handle server-to-client requests (like window/workDoneProgress/create)
                 // We need to send back a response
                 if let Some(id) = json.get("id").and_then(|i| i.as_u64()) {
-                    tracing::debug!("Received server request '{}' with id {}, sending empty response", method, id);
+                    tracing::debug!(
+                        "Received server request '{}' with id {}, sending empty response",
+                        method,
+                        id
+                    );
                     // Send an empty success response
                     let response = serde_json::json!({
                         "jsonrpc": "2.0",
@@ -185,7 +207,10 @@ impl JsonRpcTransport {
             }
 
             // It's a response with an id, parse it properly
-            tracing::debug!("Raw JSON-RPC response: {}", serde_json::to_string(&json).unwrap_or_else(|_| "failed to serialize".to_string()));
+            tracing::debug!(
+                "Raw JSON-RPC response: {}",
+                serde_json::to_string(&json).unwrap_or_else(|_| "failed to serialize".to_string())
+            );
 
             let response: JsonRpcResponse = serde_json::from_value(json).map_err(|e| {
                 CopierError::Io(std::io::Error::new(
@@ -213,7 +238,9 @@ impl JsonRpcTransport {
 
         let content = format!("Content-Length: {}\r\n\r\n{}", json.len(), json);
 
-        self.stdin.write_all(content.as_bytes()).map_err(CopierError::Io)?;
+        self.stdin
+            .write_all(content.as_bytes())
+            .map_err(CopierError::Io)?;
         self.stdin.flush().map_err(CopierError::Io)?;
 
         tracing::debug!("Sent: {}", json);
@@ -236,10 +263,7 @@ impl JsonRpcTransport {
             }
 
             if let Some((key, value)) = line.split_once(':') {
-                headers.insert(
-                    key.trim().to_lowercase(),
-                    value.trim().to_string(),
-                );
+                headers.insert(key.trim().to_lowercase(), value.trim().to_string());
             }
         }
 
@@ -254,8 +278,8 @@ impl JsonRpcTransport {
             diagnostics: Vec<lsp_types::Diagnostic>,
         }
 
-        let params: PublishDiagnosticsParams = serde_json::from_value(params.clone())
-            .map_err(|e| {
+        let params: PublishDiagnosticsParams =
+            serde_json::from_value(params.clone()).map_err(|e| {
                 CopierError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to parse diagnostics params: {}", e),
@@ -284,55 +308,73 @@ impl JsonRpcTransport {
     fn handle_progress_notification(&self, params: &serde_json::Value) -> Result<()> {
         #[derive(Deserialize)]
         struct ProgressParams {
-            token: serde_json::Value,  // Can be string or number
+            token: serde_json::Value, // Can be string or number
             value: serde_json::Value,
         }
 
-        let params: ProgressParams = serde_json::from_value(params.clone())
-            .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to parse progress params: {}", e),
-                ))
-            })?;
+        let params: ProgressParams = serde_json::from_value(params.clone()).map_err(|e| {
+            CopierError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse progress params: {}", e),
+            ))
+        })?;
 
         // Convert token to string for storage
         let token_str = match params.token {
             serde_json::Value::String(s) => s,
             serde_json::Value::Number(n) => n.to_string(),
-            _ => return Ok(()),  // Ignore invalid tokens
+            _ => return Ok(()), // Ignore invalid tokens
         };
 
         // Parse the value field to determine progress state
         let state = if let Some(kind) = params.value.get("kind").and_then(|k| k.as_str()) {
             match kind {
                 "begin" => {
-                    let title = params.value.get("title")
+                    let title = params
+                        .value
+                        .get("title")
                         .and_then(|t| t.as_str())
                         .unwrap_or("Unknown")
                         .to_string();
-                    let message = params.value.get("message")
+                    let message = params
+                        .value
+                        .get("message")
                         .and_then(|m| m.as_str())
                         .map(|s| s.to_string());
 
-                    tracing::debug!("Progress begin: {} - {}", title, message.as_deref().unwrap_or(""));
+                    tracing::debug!(
+                        "Progress begin: {} - {}",
+                        title,
+                        message.as_deref().unwrap_or("")
+                    );
                     ProgressState::Begin { title, message }
                 }
                 "report" => {
-                    let message = params.value.get("message")
+                    let message = params
+                        .value
+                        .get("message")
                         .and_then(|m| m.as_str())
                         .map(|s| s.to_string());
-                    let percentage = params.value.get("percentage")
+                    let percentage = params
+                        .value
+                        .get("percentage")
                         .and_then(|p| p.as_u64())
                         .map(|p| p as u32);
 
-                    tracing::debug!("Progress report: {} ({}%)",
+                    tracing::debug!(
+                        "Progress report: {} ({}%)",
                         message.as_deref().unwrap_or(""),
-                        percentage.unwrap_or(0));
-                    ProgressState::Report { message, percentage }
+                        percentage.unwrap_or(0)
+                    );
+                    ProgressState::Report {
+                        message,
+                        percentage,
+                    }
                 }
                 "end" => {
-                    let message = params.value.get("message")
+                    let message = params
+                        .value
+                        .get("message")
                         .and_then(|m| m.as_str())
                         .map(|s| s.to_string());
 
@@ -359,6 +401,8 @@ impl JsonRpcTransport {
     /// Check if any progress tokens are still active (not ended)
     pub fn has_active_progress(&self) -> bool {
         let progress = self.progress.lock().unwrap();
-        progress.values().any(|state| !matches!(state, ProgressState::End { .. }))
+        progress
+            .values()
+            .any(|state| !matches!(state, ProgressState::End { .. }))
     }
 }

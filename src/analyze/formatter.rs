@@ -1,6 +1,6 @@
-use crate::analyze::extractor::{get_functions, get_types, get_variables, SymbolInfo};
-use crate::analyze::type_resolver::{ResolvedType, TypeResolution};
 use crate::analyze::ProjectType;
+use crate::analyze::extractor::{SymbolInfo, get_functions, get_types, get_variables};
+use crate::analyze::type_resolver::{ResolvedType, TypeResolution};
 use lsp_types::SymbolKind;
 use serde::Serialize;
 
@@ -43,7 +43,10 @@ pub struct ProjectTypeDependencies {
 pub trait Formatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String;
     fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String;
-    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String;
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String;
     fn format_diagnostics(&self, projects: &[ProjectDiagnostics]) -> String;
     fn format_type_dependencies(&self, projects: &[ProjectTypeDependencies]) -> String;
 }
@@ -93,9 +96,7 @@ impl Formatter for MarkdownFormatter {
         // Other symbols
         let other: Vec<_> = symbols
             .iter()
-            .filter(|s| {
-                !functions.contains(s) && !types.contains(s) && !variables.contains(s)
-            })
+            .filter(|s| !functions.contains(s) && !types.contains(s) && !variables.contains(s))
             .collect();
 
         if !other.is_empty() {
@@ -125,25 +126,40 @@ impl Formatter for MarkdownFormatter {
         output
     }
 
-    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String {
         let mut output = String::new();
 
         // Header with project summary
         output.push_str("# Code Analysis\n\n");
 
         let total_files: usize = projects.iter().map(|(_, _, files)| files.len()).sum();
-        output.push_str(&format!("Analyzed {} file(s) across {} project(s)\n\n", total_files, projects.len()));
+        output.push_str(&format!(
+            "Analyzed {} file(s) across {} project(s)\n\n",
+            total_files,
+            projects.len()
+        ));
 
         // List all projects
         output.push_str("**Projects:**\n\n");
         for (project_name, project_type, files) in projects {
-            output.push_str(&format!("- **{}** ({:?}): {} file(s)\n", project_name, project_type, files.len()));
+            output.push_str(&format!(
+                "- **{}** ({:?}): {} file(s)\n",
+                project_name,
+                project_type,
+                files.len()
+            ));
         }
         output.push_str("\n---\n\n");
 
         // Detailed analysis per project
         for (project_name, project_type, files) in projects {
-            output.push_str(&format!("## Project: {} ({:?})\n\n", project_name, project_type));
+            output.push_str(&format!(
+                "## Project: {} ({:?})\n\n",
+                project_name, project_type
+            ));
 
             for (file_path, symbols) in files {
                 output.push_str(&format!("### File: `{}`\n\n", file_path));
@@ -184,7 +200,11 @@ impl Formatter for MarkdownFormatter {
             }
         }
 
-        output.push_str(&format!("Analyzed {} file(s) across {} project(s)\n\n", total_files, projects.len()));
+        output.push_str(&format!(
+            "Analyzed {} file(s) across {} project(s)\n\n",
+            total_files,
+            projects.len()
+        ));
         output.push_str("**Summary:**\n\n");
         output.push_str(&format!("- Errors: {}\n", total_errors));
         output.push_str(&format!("- Warnings: {}\n", total_warnings));
@@ -194,7 +214,10 @@ impl Formatter for MarkdownFormatter {
 
         // Detailed diagnostics per project
         for project in projects {
-            output.push_str(&format!("## Project: {} ({:?})\n\n", project.project_name, project.project_type));
+            output.push_str(&format!(
+                "## Project: {} ({:?})\n\n",
+                project.project_name, project.project_type
+            ));
 
             for file in &project.files {
                 if file.diagnostics.is_empty() {
@@ -202,17 +225,46 @@ impl Formatter for MarkdownFormatter {
                 }
 
                 // Count diagnostics by severity for this file
-                let file_errors = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::ERROR))).count();
-                let file_warnings = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::WARNING))).count();
+                let file_errors = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::ERROR)))
+                    .count();
+                let file_warnings = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::WARNING)))
+                    .count();
 
                 output.push_str(&format!("### File: `{}`\n\n", file.file_path));
-                output.push_str(&format!("**{} error(s), {} warning(s)**\n\n", file_errors, file_warnings));
+                output.push_str(&format!(
+                    "**{} error(s), {} warning(s)**\n\n",
+                    file_errors, file_warnings
+                ));
 
                 // Group by severity
-                let errors: Vec<_> = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::ERROR))).collect();
-                let warnings: Vec<_> = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::WARNING))).collect();
-                let info: Vec<_> = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::INFORMATION))).collect();
-                let hints: Vec<_> = file.diagnostics.iter().filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::HINT))).collect();
+                let errors: Vec<_> = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::ERROR)))
+                    .collect();
+                let warnings: Vec<_> = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::WARNING)))
+                    .collect();
+                let info: Vec<_> = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| {
+                        matches!(d.severity, Some(lsp_types::DiagnosticSeverity::INFORMATION))
+                    })
+                    .collect();
+                let hints: Vec<_> = file
+                    .diagnostics
+                    .iter()
+                    .filter(|d| matches!(d.severity, Some(lsp_types::DiagnosticSeverity::HINT)))
+                    .collect();
 
                 if !errors.is_empty() {
                     output.push_str("#### Errors\n\n");
@@ -405,10 +457,7 @@ fn format_resolved_type(resolved: &ResolvedType) -> String {
         }
         TypeResolution::External { file_path, line } => {
             if let (Some(path), Some(l)) = (file_path, line) {
-                format!(
-                    "- `{}` → external: `{}:{}`\n",
-                    resolved.type_name, path, l
-                )
+                format!("- `{}` → external: `{}:{}`\n", resolved.type_name, path, l)
             } else {
                 format!("- `{}` → external\n", resolved.type_name)
             }
@@ -450,7 +499,11 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
     let mut output = String::new();
 
     // Symbol name and kind
-    output.push_str(&format!("### `{}` ({})\n\n", symbol.name, symbol_kind_to_string(symbol.kind)));
+    output.push_str(&format!(
+        "### `{}` ({})\n\n",
+        symbol.name,
+        symbol_kind_to_string(symbol.kind)
+    ));
 
     // Detail (e.g., function signature)
     if let Some(detail) = &symbol.detail {
@@ -477,7 +530,11 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
             output.push_str("**Type Dependencies:**\n\n");
             for resolved_type in type_deps {
                 match &resolved_type.resolution {
-                    TypeResolution::Local { file_path, line, kind } => {
+                    TypeResolution::Local {
+                        file_path,
+                        line,
+                        kind,
+                    } => {
                         output.push_str(&format!(
                             "- `{}` → local: `{}:{}` ({})\n",
                             resolved_type.type_name,
@@ -495,17 +552,12 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
                                 line_num + 1
                             ));
                         } else {
-                            output.push_str(&format!(
-                                "- `{}` → external\n",
-                                resolved_type.type_name
-                            ));
+                            output
+                                .push_str(&format!("- `{}` → external\n", resolved_type.type_name));
                         }
                     }
                     TypeResolution::Unresolved => {
-                        output.push_str(&format!(
-                            "- `{}` → unresolved\n",
-                            resolved_type.type_name
-                        ));
+                        output.push_str(&format!("- `{}` → unresolved\n", resolved_type.type_name));
                     }
                 }
             }
@@ -518,7 +570,8 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
         output.push_str("**Fields:**\n\n");
         for child in &symbol.children {
             let child_detail = child.detail.as_deref().unwrap_or("");
-            output.push_str(&format!("- `{}`: {} ({})\n",
+            output.push_str(&format!(
+                "- `{}`: {} ({})\n",
                 child.name,
                 child_detail,
                 symbol_kind_to_string(child.kind)
@@ -600,9 +653,8 @@ impl Formatter for JsonFormatter {
             "symbols": json_symbols
         });
 
-        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(&output)
+            .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize: {}\"}}", e))
     }
 
     fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String {
@@ -620,12 +672,14 @@ impl Formatter for JsonFormatter {
             "files": file_outputs
         });
 
-        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(&output)
+            .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize: {}\"}}", e))
     }
 
-    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String {
         let mut project_outputs = Vec::new();
 
         for (project_name, project_type, files) in projects {
@@ -650,9 +704,8 @@ impl Formatter for JsonFormatter {
             "projects": project_outputs
         });
 
-        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(&output)
+            .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize: {}\"}}", e))
     }
 
     fn format_diagnostics(&self, projects: &[ProjectDiagnostics]) -> String {
@@ -662,29 +715,33 @@ impl Formatter for JsonFormatter {
             let mut file_outputs = Vec::new();
 
             for file in &project.files {
-                let diagnostics_json: Vec<_> = file.diagnostics.iter().map(|d| {
-                    let severity = match d.severity {
-                        Some(lsp_types::DiagnosticSeverity::ERROR) => "Error",
-                        Some(lsp_types::DiagnosticSeverity::WARNING) => "Warning",
-                        Some(lsp_types::DiagnosticSeverity::INFORMATION) => "Information",
-                        Some(lsp_types::DiagnosticSeverity::HINT) => "Hint",
-                        _ => "Unknown",
-                    };
+                let diagnostics_json: Vec<_> = file
+                    .diagnostics
+                    .iter()
+                    .map(|d| {
+                        let severity = match d.severity {
+                            Some(lsp_types::DiagnosticSeverity::ERROR) => "Error",
+                            Some(lsp_types::DiagnosticSeverity::WARNING) => "Warning",
+                            Some(lsp_types::DiagnosticSeverity::INFORMATION) => "Information",
+                            Some(lsp_types::DiagnosticSeverity::HINT) => "Hint",
+                            _ => "Unknown",
+                        };
 
-                    let code = d.code.as_ref().map(|c| match c {
-                        lsp_types::NumberOrString::Number(n) => n.to_string(),
-                        lsp_types::NumberOrString::String(s) => s.clone(),
-                    });
+                        let code = d.code.as_ref().map(|c| match c {
+                            lsp_types::NumberOrString::Number(n) => n.to_string(),
+                            lsp_types::NumberOrString::String(s) => s.clone(),
+                        });
 
-                    serde_json::json!({
-                        "severity": severity,
-                        "line": d.range.start.line + 1,
-                        "column": d.range.start.character + 1,
-                        "message": d.message,
-                        "source": d.source,
-                        "code": code,
+                        serde_json::json!({
+                            "severity": severity,
+                            "line": d.range.start.line + 1,
+                            "column": d.range.start.character + 1,
+                            "message": d.message,
+                            "source": d.source,
+                            "code": code,
+                        })
                     })
-                }).collect();
+                    .collect();
 
                 file_outputs.push(serde_json::json!({
                     "file": file.file_path,
@@ -703,9 +760,8 @@ impl Formatter for JsonFormatter {
             "projects": project_outputs
         });
 
-        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(&output)
+            .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize: {}\"}}", e))
     }
 
     fn format_type_dependencies(&self, projects: &[ProjectTypeDependencies]) -> String {
@@ -753,7 +809,9 @@ impl Formatter for JsonFormatter {
                                 "struct_field"
                             }
                             crate::analyze::type_extractor::TypeContext::TypeAlias => "type_alias",
-                            crate::analyze::type_extractor::TypeContext::TraitBound => "trait_bound",
+                            crate::analyze::type_extractor::TypeContext::TraitBound => {
+                                "trait_bound"
+                            }
                         };
 
                         serde_json::json!({
@@ -782,9 +840,8 @@ impl Formatter for JsonFormatter {
             "projects": project_outputs
         });
 
-        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
-            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
-        })
+        serde_json::to_string_pretty(&output)
+            .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize: {}\"}}", e))
     }
 }
 
