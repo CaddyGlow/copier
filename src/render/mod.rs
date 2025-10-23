@@ -20,30 +20,15 @@ pub fn render_entries(entries: &[FileEntry], config: &AggregateConfig) -> Result
 }
 
 fn render_entry(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String) -> Result<()> {
-    match config.format {
-        OutputFormat::Simple => render_simple(entry, config, buffer),
-        OutputFormat::Comment => render_comment(entry, config, buffer),
-        OutputFormat::Heading => render_heading(entry, config, buffer),
-    }
-}
+    // Strategy pattern: each format defines preamble (before fence) and code_prefix (inside fence)
+    let (preamble, code_prefix) = match config.format {
+        OutputFormat::Simple => (format!("{}\n\n", entry.relative), None),
+        OutputFormat::Comment => (String::new(), Some(format!("// {}\n", entry.relative))),
+        OutputFormat::Heading => (format!("## `{}`\n\n", entry.relative), None),
+    };
 
-fn render_simple(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String) -> Result<()> {
-    buffer.push_str(entry.relative.as_str());
-    buffer.push('\n');
-    buffer.push('\n');
-    render_fenced(entry, config, buffer, None)
-}
-
-fn render_comment(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String) -> Result<()> {
-    let prefix_line = format!("// {}\n", entry.relative);
-    render_fenced(entry, config, buffer, Some(prefix_line.as_str()))
-}
-
-fn render_heading(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String) -> Result<()> {
-    buffer.push_str("## `");
-    buffer.push_str(entry.relative.as_str());
-    buffer.push_str("`\n\n");
-    render_fenced(entry, config, buffer, None)
+    buffer.push_str(&preamble);
+    render_fenced(entry, config, buffer, code_prefix.as_deref())
 }
 
 fn render_fenced(
@@ -76,32 +61,22 @@ struct Fence {
 
 impl Fence {
     fn determine(content: &str, preference: FencePreference) -> Self {
-        match preference {
-            FencePreference::Backtick => Self::for_char(content, '`'),
-            FencePreference::Tilde => Self::for_char(content, '~'),
+        let ch = match preference {
+            FencePreference::Backtick => '`',
+            FencePreference::Tilde => '~',
             FencePreference::Auto => {
-                let backtick = Self::for_char(content, '`');
-                if content.contains(backtick.delimiter.as_str()) {
-                    Self::for_char(content, '~')
-                } else {
-                    backtick
-                }
+                if content.contains("```") { '~' } else { '`' }
             }
-        }
+        };
+        Self::for_char(content, ch)
     }
 
     fn for_char(content: &str, ch: char) -> Self {
-        let mut count = 3usize;
-        loop {
-            let delimiter = ch.to_string().repeat(count);
-            if !content.contains(&delimiter) {
-                return Self { delimiter };
-            }
-            count += 1;
-            if count > 8 {
-                return Self { delimiter };
-            }
-        }
+        let delimiter = (3..=8)
+            .map(|count| ch.to_string().repeat(count))
+            .find(|delim| !content.contains(delim))
+            .unwrap_or_else(|| ch.to_string().repeat(8));
+        Self { delimiter }
     }
 
     fn open_line(&self, language: Option<&str>) -> String {
