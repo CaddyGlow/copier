@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use camino::Utf8Path;
 
-static LANGUAGE_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+static LANGUAGE_MAP: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     HashMap::from([
         ("rs", "rust"),
         ("c", "c"),
@@ -57,7 +56,7 @@ static LANGUAGE_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     ])
 });
 
-static LANGUAGE_FILENAMES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+static LANGUAGE_FILENAMES: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     HashMap::from([
         ("Dockerfile", "dockerfile"),
         ("Makefile", "makefile"),

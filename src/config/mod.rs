@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::ValueEnum;
 use serde::Deserialize;
@@ -100,7 +99,7 @@ pub struct ExtractConfig {
 }
 
 pub fn load(cli: &Cli) -> Result<RuntimeConfig> {
-    let cwd = std::env::current_dir().context("failed to read current directory")?;
+    let cwd = std::env::current_dir()?;
     let cwd = to_utf8_path(cwd)?;
 
     let config_path = resolve_config_path(cli, &cwd);
@@ -229,7 +228,8 @@ fn build_extract_config(
 }
 
 fn parse_file_config(path: &Utf8Path) -> Result<FileConfig> {
-    let raw = fs::read_to_string(path).with_context(|| format!("failed to read {}", path))?;
+    let raw = fs::read_to_string(path)
+        .map_err(|e| CopierError::Config(format!("failed to read {}: {}", path, e)))?;
     let de = toml::de::Deserializer::parse(&raw)
         .map_err(|err| CopierError::ConfigParse(err.to_string()))?;
     let file_config: FileConfig = serde_path_to_error::deserialize(de)

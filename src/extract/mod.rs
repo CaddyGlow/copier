@@ -370,6 +370,6 @@ fn prompt_overwrite(path: &Utf8Path) -> Result<bool> {
         .with_prompt(prompt)
         .default(false)
         .interact()
-        .map_err(|err| CopierError::Other(err.into()))?;
+        .map_err(std::io::Error::other)?;
     Ok(confirmed)
 }

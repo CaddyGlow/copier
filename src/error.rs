@@ -27,6 +27,6 @@ pub enum CopierError {
     #[error("operation aborted: {0}")]
     Aborted(String),
 
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    #[error("failed to initialize telemetry: {0}")]
+    TelemetryInit(String),
 }

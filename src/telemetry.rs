@@ -1,28 +1,31 @@
-use anyhow::anyhow;
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
+
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::error::CopierError;
 
-static TELEMETRY: OnceCell<()> = OnceCell::new();
+static TELEMETRY: OnceLock<()> = OnceLock::new();
 
 pub fn init(verbosity: u8) -> Result<(), CopierError> {
-    TELEMETRY.get_or_try_init(|| {
-        let default_level = level_for_verbosity(verbosity);
-        let env_filter = EnvFilter::builder()
-            .with_default_directive(default_level.into())
-            .from_env_lossy();
+    // Check if already initialized
+    if TELEMETRY.get().is_some() {
+        return Ok(());
+    }
 
-        fmt()
-            .with_env_filter(env_filter)
-            .with_target(false)
-            .try_init()
-            .map_err(|err| CopierError::Other(anyhow!(err.to_string())))?;
+    let default_level = level_for_verbosity(verbosity);
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(default_level.into())
+        .from_env_lossy();
 
-        Ok::<(), CopierError>(())
-    })?;
+    fmt()
+        .with_env_filter(env_filter)
+        .with_target(false)
+        .try_init()
+        .map_err(|err| CopierError::TelemetryInit(err.to_string()))?;
 
+    // Set the flag - if another thread beat us to it, that's fine
+    let _ = TELEMETRY.set(());
     Ok(())
 }
 

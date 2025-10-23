@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::io::Write;
 
-use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use glob::glob;
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -35,9 +34,7 @@ pub fn run(context: &AppContext, config: AggregateConfig) -> Result<()> {
         debug!(path = %output, "wrote aggregated markdown");
     } else {
         let mut stdout = std::io::stdout().lock();
-        stdout
-            .write_all(document.as_bytes())
-            .context("failed to write aggregated markdown to stdout")?;
+        stdout.write_all(document.as_bytes())?;
     }
 
     Ok(())
