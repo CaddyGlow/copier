@@ -99,7 +99,7 @@ impl<'a> TypeResolver<'a> {
                             file_path: uri
                                 .to_file_path()
                                 .ok()
-                                .map(|p| FilePath::from_absolute_unchecked(p)),
+                                .map(FilePath::from_absolute_unchecked),
                             line: Some(range.start.line),
                         };
                     }
