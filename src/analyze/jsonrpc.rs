@@ -92,39 +92,59 @@ impl JsonRpcTransport {
     }
 
     /// Read a response from the LSP server
+    /// LSP servers can send both responses (with id) and notifications (without id).
+    /// This method skips notifications and returns only responses.
     pub fn read_response(&mut self) -> Result<JsonRpcResponse> {
-        let headers = self.read_headers()?;
-        let content_length = headers
-            .get("content-length")
-            .ok_or_else(|| {
+        loop {
+            let headers = self.read_headers()?;
+            let content_length = headers
+                .get("content-length")
+                .ok_or_else(|| {
+                    CopierError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Missing Content-Length header",
+                    ))
+                })?
+                .parse::<usize>()
+                .map_err(|e| {
+                    CopierError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Invalid Content-Length: {}", e),
+                    ))
+                })?;
+
+            let mut content = vec![0u8; content_length];
+            self.stdout.read_exact(&mut content).map_err(CopierError::Io)?;
+
+            // Parse as generic JSON first to check if it's a notification or response
+            let json: serde_json::Value = serde_json::from_slice(&content).map_err(|e| {
                 CopierError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "Missing Content-Length header",
-                ))
-            })?
-            .parse::<usize>()
-            .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Invalid Content-Length: {}", e),
+                    format!("Failed to parse JSON: {}", e),
                 ))
             })?;
 
-        let mut content = vec![0u8; content_length];
-        self.stdout.read_exact(&mut content).map_err(CopierError::Io)?;
+            // Check if it has an 'id' field - if not, it's a notification, skip it
+            if json.get("id").is_none() {
+                tracing::debug!("Received notification (skipping): {}",
+                    String::from_utf8_lossy(&content));
+                continue;  // Skip notifications and read next message
+            }
 
-        let response: JsonRpcResponse = serde_json::from_slice(&content).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Failed to parse JSON-RPC response: {}", e),
-            ))
-        })?;
+            // It's a response with an id, parse it properly
+            let response: JsonRpcResponse = serde_json::from_value(json).map_err(|e| {
+                CopierError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to parse JSON-RPC response: {}", e),
+                ))
+            })?;
 
-        if let Some(error) = &response.error {
-            tracing::error!("JSON-RPC error: {:?}", error);
+            if let Some(error) = &response.error {
+                tracing::error!("JSON-RPC error: {:?}", error);
+            }
+
+            return Ok(response);
         }
-
-        Ok(response)
     }
 
     /// Write a message with LSP headers

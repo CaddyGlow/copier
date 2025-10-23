@@ -21,20 +21,50 @@ impl LspClient {
         root_path: &Path,
         project_type: ProjectType,
     ) -> Result<Self> {
+        Self::new_with_paths(server_cmd, args, root_path, project_type, &[])
+    }
+
+    /// Create a new LSP client with custom PATH extensions
+    pub fn new_with_paths(
+        server_cmd: &str,
+        args: &[String],
+        root_path: &Path,
+        project_type: ProjectType,
+        bin_paths: &[String],
+    ) -> Result<Self> {
         tracing::info!("Spawning LSP server: {} {:?}", server_cmd, args);
 
-        let mut child = Command::new(server_cmd)
+        let mut command = Command::new(server_cmd);
+        command
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to spawn LSP server '{}': {}", server_cmd, e),
-                ))
-            })?;
+            .stderr(Stdio::piped());
+
+        // Extend PATH if bin_paths are provided
+        if !bin_paths.is_empty() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let expanded_paths: Vec<String> = bin_paths
+                .iter()
+                .map(|p| shellexpand::tilde(p).to_string())
+                .collect();
+
+            let new_path = if current_path.is_empty() {
+                expanded_paths.join(":")
+            } else {
+                format!("{}:{}", expanded_paths.join(":"), current_path)
+            };
+
+            tracing::debug!("Extended PATH with: {:?}", expanded_paths);
+            command.env("PATH", new_path);
+        }
+
+        let mut child = command.spawn().map_err(|e| {
+            CopierError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to spawn LSP server '{}': {}", server_cmd, e),
+            ))
+        })?;
 
         let stdin = child.stdin.take().ok_or_else(|| {
             CopierError::Io(std::io::Error::new(

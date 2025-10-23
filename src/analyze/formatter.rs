@@ -1,4 +1,5 @@
 use crate::analyze::extractor::{get_functions, get_types, get_variables, SymbolInfo};
+use crate::analyze::ProjectType;
 use lsp_types::SymbolKind;
 use serde::Serialize;
 
@@ -11,6 +12,7 @@ pub enum OutputFormat {
 pub trait Formatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String;
     fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String;
+    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String;
 }
 
 pub struct MarkdownFormatter;
@@ -85,6 +87,38 @@ impl Formatter for MarkdownFormatter {
             output.push_str(&format!("## File: `{}`\n\n", file_path));
             output.push_str(&self.format(symbols, file_path));
             output.push_str("\n---\n\n");
+        }
+
+        output
+    }
+
+    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+        let mut output = String::new();
+
+        // Header with project summary
+        output.push_str("# Code Analysis\n\n");
+
+        let total_files: usize = projects.iter().map(|(_, _, files)| files.len()).sum();
+        output.push_str(&format!("Analyzed {} file(s) across {} project(s)\n\n", total_files, projects.len()));
+
+        // List all projects
+        output.push_str("**Projects:**\n\n");
+        for (project_name, project_type, files) in projects {
+            output.push_str(&format!("- **{}** ({:?}): {} file(s)\n", project_name, project_type, files.len()));
+        }
+        output.push_str("\n---\n\n");
+
+        // Detailed analysis per project
+        for (project_name, project_type, files) in projects {
+            output.push_str(&format!("## Project: {} ({:?})\n\n", project_name, project_type));
+
+            for (file_path, symbols) in files {
+                output.push_str(&format!("### File: `{}`\n\n", file_path));
+                output.push_str(&self.format(symbols, file_path));
+                output.push_str("\n");
+            }
+
+            output.push_str("---\n\n");
         }
 
         output
@@ -221,6 +255,36 @@ impl Formatter for JsonFormatter {
 
         let output = serde_json::json!({
             "files": file_outputs
+        });
+
+        serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
+            format!("{{\"error\": \"Failed to serialize: {}\"}}", e)
+        })
+    }
+
+    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+        let mut project_outputs = Vec::new();
+
+        for (project_name, project_type, files) in projects {
+            let mut file_outputs = Vec::new();
+
+            for (file_path, symbols) in files {
+                let json_symbols: Vec<JsonSymbol> = symbols.iter().map(JsonSymbol::from).collect();
+                file_outputs.push(serde_json::json!({
+                    "file": file_path,
+                    "symbols": json_symbols
+                }));
+            }
+
+            project_outputs.push(serde_json::json!({
+                "name": project_name,
+                "type": format!("{:?}", project_type),
+                "files": file_outputs
+            }));
+        }
+
+        let output = serde_json::json!({
+            "projects": project_outputs
         });
 
         serde_json::to_string_pretty(&output).unwrap_or_else(|e| {

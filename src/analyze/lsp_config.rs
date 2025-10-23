@@ -1,4 +1,5 @@
 use super::project_root::ProjectType;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct LspServerConfig {
@@ -13,10 +14,41 @@ impl LspServerConfig {
             args,
         }
     }
+
+    /// Parse a command string that may include arguments
+    /// e.g., "rust-analyzer --verbose" → ("rust-analyzer", ["--verbose"])
+    pub fn from_command_string(cmd_str: &str) -> Self {
+        let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+        if parts.is_empty() {
+            return Self::new("", vec![]);
+        }
+
+        let command = parts[0].to_string();
+        let args = parts[1..].iter().map(|s| s.to_string()).collect();
+
+        Self { command, args }
+    }
 }
 
 /// Get the default LSP server configuration for a given project type
 pub fn get_lsp_server(project_type: ProjectType) -> LspServerConfig {
+    get_lsp_server_with_config(project_type, None)
+}
+
+/// Get LSP server configuration with optional custom config
+pub fn get_lsp_server_with_config(
+    project_type: ProjectType,
+    custom_config: Option<&HashMap<String, String>>,
+) -> LspServerConfig {
+    // Check custom config first
+    if let Some(config) = custom_config {
+        let key = project_type_to_key(project_type);
+        if let Some(cmd_str) = config.get(key) {
+            return LspServerConfig::from_command_string(cmd_str);
+        }
+    }
+
+    // Fall back to defaults
     match project_type {
         ProjectType::Rust => LspServerConfig::new("rust-analyzer", vec![]),
 
@@ -39,6 +71,18 @@ pub fn get_lsp_server(project_type: ProjectType) -> LspServerConfig {
             // For now, we'll default to rust-analyzer as a fallback
             LspServerConfig::new("rust-analyzer", vec![])
         }
+    }
+}
+
+/// Convert project type to config key
+fn project_type_to_key(project_type: ProjectType) -> &'static str {
+    match project_type {
+        ProjectType::Rust => "rust",
+        ProjectType::Python => "python",
+        ProjectType::TypeScript => "typescript",
+        ProjectType::JavaScript => "javascript",
+        ProjectType::Go => "go",
+        ProjectType::Unknown => "unknown",
     }
 }
 

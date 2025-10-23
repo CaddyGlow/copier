@@ -1,7 +1,7 @@
 use crate::error::{CopierError, Result};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProjectType {
     Rust,
     Python,
@@ -74,6 +74,83 @@ fn check_project_markers(dir: &Path) -> Option<ProjectType> {
     }
 
     None
+}
+
+/// Extract the project name from project files
+/// Falls back to directory basename if extraction fails
+pub fn extract_project_name(root_path: &Path, project_type: ProjectType) -> String {
+    match project_type {
+        ProjectType::Rust => extract_from_cargo_toml(root_path),
+        ProjectType::Python => extract_from_pyproject_toml(root_path),
+        ProjectType::TypeScript | ProjectType::JavaScript => extract_from_package_json(root_path),
+        ProjectType::Go => extract_from_go_mod(root_path),
+        ProjectType::Unknown => Some(get_directory_name(root_path)),
+    }
+    .unwrap_or_else(|| get_directory_name(root_path))
+}
+
+fn extract_from_cargo_toml(root_path: &Path) -> Option<String> {
+    let cargo_toml_path = root_path.join("Cargo.toml");
+    let content = std::fs::read_to_string(cargo_toml_path).ok()?;
+
+    let parsed: toml::Value = toml::from_str(&content).ok()?;
+    let name = parsed.get("package")?.get("name")?.as_str()?;
+
+    Some(name.to_string())
+}
+
+fn extract_from_pyproject_toml(root_path: &Path) -> Option<String> {
+    let pyproject_path = root_path.join("pyproject.toml");
+    let content = std::fs::read_to_string(pyproject_path).ok()?;
+
+    let parsed: toml::Value = toml::from_str(&content).ok()?;
+
+    // Try [project].name first (PEP 621 standard)
+    if let Some(name) = parsed.get("project").and_then(|p| p.get("name")).and_then(|n| n.as_str()) {
+        return Some(name.to_string());
+    }
+
+    // Try [tool.poetry].name (Poetry)
+    if let Some(name) = parsed.get("tool")
+        .and_then(|t| t.get("poetry"))
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str()) {
+        return Some(name.to_string());
+    }
+
+    None
+}
+
+fn extract_from_package_json(root_path: &Path) -> Option<String> {
+    let package_json_path = root_path.join("package.json");
+    let content = std::fs::read_to_string(package_json_path).ok()?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let name = parsed.get("name")?.as_str()?;
+
+    Some(name.to_string())
+}
+
+fn extract_from_go_mod(root_path: &Path) -> Option<String> {
+    let go_mod_path = root_path.join("go.mod");
+    let content = std::fs::read_to_string(go_mod_path).ok()?;
+
+    // First line should be: module github.com/user/project
+    let first_line = content.lines().next()?;
+    let module_path = first_line.strip_prefix("module ")?.trim();
+
+    // Extract last segment of module path
+    let name = module_path.rsplit('/').next()?;
+
+    Some(name.to_string())
+}
+
+fn get_directory_name(root_path: &Path) -> String {
+    root_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string()
 }
 
 #[cfg(test)]
