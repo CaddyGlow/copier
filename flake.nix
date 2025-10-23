@@ -151,6 +151,7 @@
             cargo-tarpaulin
             cargo-ndk
             rustup
+            tokei
           ];
 
           # Include GTK4 in dev shell for icon-picker development

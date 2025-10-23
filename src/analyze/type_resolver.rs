@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// A resolved type with its definition location
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedType {
     pub type_name: String,
     pub context: TypeContext,
@@ -13,7 +13,7 @@ pub struct ResolvedType {
 }
 
 /// Where a type is defined
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeResolution {
     /// Type found in analyzed files (local)
     Local {
@@ -212,6 +212,9 @@ mod tests {
         let type_refs = vec![TypeReference {
             type_name: "MyStruct".to_string(),
             context: TypeContext::FunctionParameter,
+            position: lsp_types::Position { line: 0, character: 0 },
+            uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
+            char_offset: None,
         }];
 
         let resolved = resolver.resolve_types(&type_refs, None);
@@ -232,6 +235,9 @@ mod tests {
         let type_refs = vec![TypeReference {
             type_name: "UnknownType".to_string(),
             context: TypeContext::FunctionParameter,
+            position: lsp_types::Position { line: 0, character: 0 },
+            uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
+            char_offset: None,
         }];
 
         let resolved = resolver.resolve_types(&type_refs, None);

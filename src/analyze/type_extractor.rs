@@ -10,6 +10,7 @@ pub struct TypeReference {
     pub context: TypeContext,
     pub position: lsp_types::Position,  // Position in the source file where the type is referenced
     pub uri: lsp_types::Url,            // URI of the file containing the reference
+    pub char_offset: Option<u32>,       // Character offset within the type annotation (for generics)
 }
 
 /// Context where a type is used
@@ -93,6 +94,7 @@ impl TypeExtractor {
                                 context: TypeContext::FunctionParameter,
                                 position: child.selection_range.start,
                                 uri: uri.clone(),
+                                char_offset: None, // TODO: calculate offset for function parameters
                             });
                         }
                     }
@@ -117,12 +119,22 @@ impl TypeExtractor {
                 for child in &symbol.children {
                     if matches!(child.kind, SymbolKind::FIELD | SymbolKind::PROPERTY) {
                         if let Some(detail) = &child.detail {
-                            for type_name in self.extract_type_names(detail) {
+                            // Calculate where the type annotation starts (after field name and `: `)
+                            let type_annotation_start = child.selection_range.end.character + 2;
+
+                            for (type_name, offset) in self.extract_type_names_with_offsets(detail) {
+                                // Position points to the type name within the annotation
+                                let type_position = lsp_types::Position {
+                                    line: child.selection_range.start.line,
+                                    character: type_annotation_start + offset as u32,
+                                };
+
                                 types.push(TypeReference {
                                     type_name,
                                     context: TypeContext::StructField,
-                                    position: child.selection_range.start,
+                                    position: type_position,
                                     uri: uri.clone(),
+                                    char_offset: Some(offset as u32),
                                 });
                             }
                         }
@@ -131,12 +143,22 @@ impl TypeExtractor {
             }
             SymbolKind::FIELD | SymbolKind::PROPERTY => {
                 if let Some(detail) = &symbol.detail {
-                    for type_name in self.extract_type_names(detail) {
+                    // Calculate where the type annotation starts (after field name and `: `)
+                    let type_annotation_start = symbol.selection_range.end.character + 2;
+
+                    for (type_name, offset) in self.extract_type_names_with_offsets(detail) {
+                        // Position points to the type name within the annotation
+                        let type_position = lsp_types::Position {
+                            line: symbol.selection_range.start.line,
+                            character: type_annotation_start + offset as u32,
+                        };
+
                         types.push(TypeReference {
                             type_name,
                             context: TypeContext::StructField,
-                            position: symbol.selection_range.start,
+                            position: type_position,
                             uri: uri.clone(),
+                            char_offset: Some(offset as u32),
                         });
                     }
                 }
@@ -149,6 +171,7 @@ impl TypeExtractor {
                             context: TypeContext::TypeAlias,
                             position: symbol.selection_range.start,
                             uri: uri.clone(),
+                            char_offset: None,
                         });
                     }
                 }
@@ -222,6 +245,7 @@ impl TypeExtractor {
                     context: TypeContext::FunctionReturn,
                     position: range.end,
                     uri: uri.clone(),
+                    char_offset: None,
                 });
             }
         }
@@ -266,23 +290,13 @@ impl TypeExtractor {
         None
     }
 
-    /// Extract type names from a type expression
+    /// Extract type names from a type expression with their character offsets
     /// Handles generics, qualified paths, etc.
-    fn extract_type_names(&self, type_expr: &str) -> Vec<String> {
+    /// Returns (type_name, char_offset) tuples
+    fn extract_type_names_with_offsets(&self, type_expr: &str) -> Vec<(String, usize)> {
         let mut types = Vec::new();
 
-        // Remove common noise characters
-        let cleaned = type_expr
-            .replace('&', " ")
-            .replace('*', " ")
-            .replace("mut ", "")
-            .replace("const ", "")
-            .replace("async ", "")
-            .replace("static ", "");
-
-        // For Python, we need to match lowercase type names as well
-        // Match identifiers: uppercase (Rust-style) or lowercase (Python-style)
-        // Also handle qualified paths with :: (Rust) or . (Python)
+        // Match identifiers and track their positions in the ORIGINAL string
         let re = match self.project_type {
             ProjectType::Python => {
                 // Python: match lowercase identifiers and dotted paths (e.g., typing.List)
@@ -294,9 +308,11 @@ impl TypeExtractor {
             }
         };
 
-        for cap in re.captures_iter(&cleaned) {
-            if let Some(type_name) = cap.get(1) {
-                let name = type_name.as_str();
+        for cap in re.captures_iter(type_expr) {
+            if let Some(type_match) = cap.get(1) {
+                let name = type_match.as_str();
+                let offset = type_match.start();
+
                 // Extract last component if it's a qualified path
                 let simple_name = if name.contains("::") {
                     name.split("::").last().unwrap_or(name)
@@ -308,13 +324,21 @@ impl TypeExtractor {
                 };
 
                 if !simple_name.is_empty() {
-                    types.push(simple_name.to_string());
+                    types.push((simple_name.to_string(), offset));
                 }
             }
         }
 
-        tracing::debug!("Extracted type names from '{}': {:?}", type_expr, types);
+        tracing::debug!("Extracted type names with offsets from '{}': {:?}", type_expr, types);
         types
+    }
+
+    /// Extract type names from a type expression (without offsets, for backwards compatibility)
+    fn extract_type_names(&self, type_expr: &str) -> Vec<String> {
+        self.extract_type_names_with_offsets(type_expr)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect()
     }
 
     /// Check if a type is a built-in

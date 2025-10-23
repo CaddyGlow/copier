@@ -471,6 +471,48 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
         symbol.range.end.line + 1
     ));
 
+    // Type dependencies
+    if let Some(type_deps) = &symbol.type_dependencies {
+        if !type_deps.is_empty() {
+            output.push_str("**Type Dependencies:**\n\n");
+            for resolved_type in type_deps {
+                match &resolved_type.resolution {
+                    TypeResolution::Local { file_path, line, kind } => {
+                        output.push_str(&format!(
+                            "- `{}` → local: `{}:{}` ({})\n",
+                            resolved_type.type_name,
+                            file_path.display(),
+                            line + 1,
+                            kind
+                        ));
+                    }
+                    TypeResolution::External { file_path, line } => {
+                        if let (Some(path), Some(line_num)) = (file_path, line) {
+                            output.push_str(&format!(
+                                "- `{}` → external: `{}:{}`\n",
+                                resolved_type.type_name,
+                                path,
+                                line_num + 1
+                            ));
+                        } else {
+                            output.push_str(&format!(
+                                "- `{}` → external\n",
+                                resolved_type.type_name
+                            ));
+                        }
+                    }
+                    TypeResolution::Unresolved => {
+                        output.push_str(&format!(
+                            "- `{}` → unresolved\n",
+                            resolved_type.type_name
+                        ));
+                    }
+                }
+            }
+            output.push_str("\n");
+        }
+    }
+
     // Fields/Members (children)
     if !symbol.children.is_empty() {
         output.push_str("**Fields:**\n\n");

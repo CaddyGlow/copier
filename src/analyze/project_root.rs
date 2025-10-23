@@ -37,10 +37,29 @@ pub fn detect_project_root(file_path: &Path) -> Result<(PathBuf, ProjectType)> {
 
         // Move up one directory
         if !current.pop() {
-            // Reached filesystem root, use start directory as fallback
-            return Ok((start_dir.to_path_buf(), ProjectType::Unknown));
+            // Reached filesystem root, try to detect from file extension
+            let project_type = if canonical_path.is_file() {
+                detect_type_from_extension(&canonical_path).unwrap_or(ProjectType::Unknown)
+            } else {
+                ProjectType::Unknown
+            };
+            return Ok((start_dir.to_path_buf(), project_type));
         }
     }
+}
+
+/// Detect project type from file extension
+fn detect_type_from_extension(file_path: &Path) -> Option<ProjectType> {
+    file_path.extension().and_then(|ext| {
+        match ext.to_str()? {
+            "rs" => Some(ProjectType::Rust),
+            "py" => Some(ProjectType::Python),
+            "ts" | "tsx" => Some(ProjectType::TypeScript),
+            "js" | "jsx" => Some(ProjectType::JavaScript),
+            "go" => Some(ProjectType::Go),
+            _ => None,
+        }
+    })
 }
 
 fn check_project_markers(dir: &Path) -> Option<ProjectType> {

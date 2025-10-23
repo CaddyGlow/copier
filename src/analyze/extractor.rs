@@ -1,4 +1,5 @@
 use crate::analyze::lsp_client::LspClient;
+use crate::analyze::type_resolver::ResolvedType;
 use crate::error::Result;
 use lsp_types::*;
 
@@ -11,6 +12,7 @@ pub struct SymbolInfo {
     pub range: Range,
     pub selection_range: Range,
     pub children: Vec<SymbolInfo>,
+    pub type_dependencies: Option<Vec<ResolvedType>>,
 }
 
 /// Extract symbols and their documentation from a file using LSP
@@ -33,6 +35,7 @@ pub fn extract_symbols(client: &mut LspClient, uri: &Url) -> Result<Vec<SymbolIn
                     range: symbol.location.range,
                     selection_range: symbol.location.range,
                     children: vec![],
+                    type_dependencies: None,
                 });
             }
         }
@@ -70,6 +73,7 @@ fn convert_document_symbol(
         range: symbol.range,
         selection_range: symbol.selection_range,
         children,
+        type_dependencies: None,
     })
 }
 

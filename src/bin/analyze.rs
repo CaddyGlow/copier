@@ -1,7 +1,7 @@
 use clap::Parser;
 use copier::analyze::{
     detect_project_root, extract_project_name, extract_symbols, get_formatter,
-    get_lsp_server_with_config, has_lsp_support, LspClient, OutputFormat, SymbolIndex,
+    get_lsp_server_with_config, has_lsp_support, LspClient, OutputFormat, SymbolIndex, SymbolInfo,
     TypeExtractor, TypeResolver,
 };
 use copier::config::load_analyze_config;
@@ -10,6 +10,122 @@ use ignore::WalkBuilder;
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+/// Recursively populate type dependencies for symbols
+fn populate_type_dependencies(
+    symbols: &mut [SymbolInfo],
+    type_extractor: &TypeExtractor,
+    type_resolver: &TypeResolver,
+    uri: &lsp_types::Url,
+    client: &mut LspClient,
+) {
+    for symbol in symbols.iter_mut() {
+        // Extract types for this symbol
+        let type_refs = type_extractor.extract_types(symbol, uri);
+
+        if !type_refs.is_empty() {
+            // Resolve the types
+            let resolved = type_resolver.resolve_types(&type_refs, Some(client));
+            symbol.type_dependencies = Some(resolved);
+        }
+
+        // Recursively process children
+        if !symbol.children.is_empty() {
+            populate_type_dependencies(&mut symbol.children, type_extractor, type_resolver, uri, client);
+        }
+    }
+}
+
+/// Collect external type definitions referenced by symbols
+fn collect_external_types(
+    symbols: &[SymbolInfo],
+) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
+    use std::collections::{HashMap, HashSet};
+    use copier::analyze::type_resolver::TypeResolution;
+
+    let mut external_files: HashMap<String, HashSet<String>> = HashMap::new();
+
+    fn collect_from_symbol(
+        symbol: &SymbolInfo,
+        external_files: &mut HashMap<String, HashSet<String>>,
+    ) {
+        // Check type dependencies
+        if let Some(type_deps) = &symbol.type_dependencies {
+            for resolved_type in type_deps {
+                if let TypeResolution::External { file_path: Some(path), .. } = &resolved_type.resolution {
+                    external_files
+                        .entry(path.clone())
+                        .or_insert_with(HashSet::new)
+                        .insert(resolved_type.type_name.clone());
+                }
+            }
+        }
+
+        // Recursively process children
+        for child in &symbol.children {
+            collect_from_symbol(child, external_files);
+        }
+    }
+
+    for symbol in symbols {
+        collect_from_symbol(symbol, &mut external_files);
+    }
+
+    external_files
+}
+
+/// Fetch external symbol definitions from their source files
+fn fetch_external_symbols(
+    external_files: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+    client: &mut LspClient,
+) -> Result<Vec<SymbolInfo>> {
+    let mut external_symbols = Vec::new();
+
+    for (file_path, symbol_names) in external_files {
+        let path = PathBuf::from(file_path);
+
+        // Read the external file
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("Failed to read external file {}: {}", file_path, e);
+                continue;
+            }
+        };
+
+        // Convert to URI
+        let file_uri = match lsp_types::Url::from_file_path(&path) {
+            Ok(uri) => uri,
+            Err(_) => {
+                tracing::warn!("Failed to convert path to URI: {}", file_path);
+                continue;
+            }
+        };
+
+        // Open document in LSP
+        if let Err(e) = client.did_open(&path, &content) {
+            tracing::warn!("Failed to open external file in LSP: {}", e);
+            continue;
+        }
+
+        // Extract symbols
+        match extract_symbols(client, &file_uri) {
+            Ok(symbols) => {
+                // Filter to only the symbols we need
+                for symbol in symbols {
+                    if symbol_names.contains(&symbol.name) {
+                        external_symbols.push(symbol);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to extract symbols from {}: {}", file_path, e);
+            }
+        }
+    }
+
+    Ok(external_symbols)
+}
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -62,10 +178,6 @@ struct Args {
     /// Include hidden files and directories (starting with .)
     #[arg(long)]
     hidden: bool,
-
-    /// Analyze type dependencies and show where types are defined
-    #[arg(long)]
-    type_deps: bool,
 
     /// Timeout in seconds to wait for LSP server readiness (default: 10)
     #[arg(long, default_value = "10")]
@@ -146,15 +258,8 @@ fn run(args: Args) -> Result<()> {
         } else {
             run_diagnostics_multiple_files(&expanded_args)
         }
-    } else if expanded_args.type_deps {
-        // Type dependencies mode
-        if expanded_args.inputs.len() == 1 {
-            run_type_deps_single_file(&expanded_args)
-        } else {
-            run_type_deps_multiple_files(&expanded_args)
-        }
     } else {
-        // Symbol extraction mode
+        // Symbol extraction mode (with type dependencies)
         if expanded_args.inputs.len() == 1 {
             run_single_file(&expanded_args)
         } else {
@@ -294,6 +399,10 @@ fn run_single_file(args: &Args) -> Result<()> {
     tracing::info!("Initializing LSP...");
     client.initialize()?;
 
+    // Wait for LSP server to complete indexing
+    let timeout_secs = config.lsp_readiness_timeout_secs.unwrap_or(args.lsp_timeout);
+    client.wait_for_indexing(timeout_secs)?;
+
     // Get file URI
     let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
         copier::error::CopierError::Io(std::io::Error::new(
@@ -308,9 +417,42 @@ fn run_single_file(args: &Args) -> Result<()> {
 
     // Extract symbols
     tracing::info!("Extracting symbols...");
-    let symbols = extract_symbols(&mut client, &file_uri)?;
+    let mut symbols = extract_symbols(&mut client, &file_uri)?;
 
     tracing::info!("Found {} symbols", symbols.len());
+
+    // Build symbol index for type resolution
+    let file_symbols = vec![(input_path.clone(), symbols.clone())];
+    let symbol_index = SymbolIndex::build_from_symbols(&file_symbols);
+
+    // Populate type dependencies
+    let type_extractor = TypeExtractor::new(project_type);
+    let type_resolver = TypeResolver::new(&symbol_index, true);
+    populate_type_dependencies(&mut symbols, &type_extractor, &type_resolver, &file_uri, &mut client);
+
+    let total_types: usize = symbols.iter()
+        .filter_map(|s| s.type_dependencies.as_ref().map(|t| t.len()))
+        .sum();
+    if total_types > 0 {
+        tracing::info!("Associated {} type references with symbols", total_types);
+    }
+
+    // Collect and fetch external type definitions
+    let external_files = collect_external_types(&symbols);
+    if !external_files.is_empty() {
+        tracing::info!("Found {} external files with type definitions", external_files.len());
+        match fetch_external_symbols(&external_files, &mut client) {
+            Ok(mut external_symbols) => {
+                if !external_symbols.is_empty() {
+                    tracing::info!("Fetched {} external type definitions", external_symbols.len());
+                    symbols.append(&mut external_symbols);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to fetch external symbols: {}", e);
+            }
+        }
+    }
 
     // Calculate relative path from project root
     let relative_path = input_path
@@ -418,8 +560,12 @@ fn run_multiple_files(args: &Args) -> Result<()> {
         tracing::info!("Initializing LSP...");
         client.initialize()?;
 
-        // Process each file in this group
-        let mut project_files = Vec::new();
+        // Wait for LSP server to complete indexing
+        let timeout_secs = config.lsp_readiness_timeout_secs.unwrap_or(args.lsp_timeout);
+        client.wait_for_indexing(timeout_secs)?;
+
+        // First pass: collect all symbols from all files
+        let mut all_file_symbols = Vec::new();
 
         for input in &files {
             let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
@@ -440,14 +586,67 @@ fn run_multiple_files(args: &Args) -> Result<()> {
 
             tracing::info!("Found {} symbols in {}", symbols.len(), input.display());
 
+            all_file_symbols.push((input_path, symbols));
+        }
+
+        // Build symbol index from all files
+        let symbol_index = SymbolIndex::build_from_symbols(&all_file_symbols);
+        tracing::info!("Built symbol index with {} types", symbol_index.len());
+
+        // Second pass: populate type dependencies
+        let type_extractor = TypeExtractor::new(project_type);
+        let type_resolver = TypeResolver::new(&symbol_index, true);
+        let mut project_files = Vec::new();
+
+        for (input_path, symbols) in &all_file_symbols {
+            let file_uri = lsp_types::Url::from_file_path(input_path).map_err(|_| {
+                copier::error::CopierError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid file path for URI conversion",
+                ))
+            })?;
+
+            let mut mutable_symbols = symbols.clone();
+            populate_type_dependencies(&mut mutable_symbols, &type_extractor, &type_resolver, &file_uri, &mut client);
+
+            let total_types: usize = mutable_symbols.iter()
+                .filter_map(|s| s.type_dependencies.as_ref().map(|t| t.len()))
+                .sum();
+            if total_types > 0 {
+                tracing::info!("Associated {} type references with symbols in {}", total_types, input_path.display());
+            }
+
             // Calculate relative path
             let relative_path = input_path
                 .strip_prefix(&root_path)
-                .unwrap_or(&input_path)
+                .unwrap_or(input_path)
                 .display()
                 .to_string();
 
-            project_files.push((relative_path, symbols));
+            project_files.push((relative_path, mutable_symbols));
+        }
+
+        // Collect and fetch external type definitions for this project
+        let all_symbols: Vec<&SymbolInfo> = project_files.iter()
+            .flat_map(|(_, syms)| syms.iter())
+            .collect();
+
+        let external_files = collect_external_types(&all_symbols.iter().map(|&s| s.clone()).collect::<Vec<_>>());
+        if !external_files.is_empty() {
+            tracing::info!("Found {} external files with type definitions for project {}", external_files.len(), project_name);
+            match fetch_external_symbols(&external_files, &mut client) {
+                Ok(external_symbols) => {
+                    if !external_symbols.is_empty() {
+                        tracing::info!("Fetched {} external type definitions", external_symbols.len());
+                        // Add external symbols as a separate "file" in the project
+                        let relative_path = format!("_external_dependencies_{}", project_name);
+                        project_files.push((relative_path, external_symbols));
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch external symbols: {}", e);
+                }
+            }
         }
 
         // Shutdown LSP for this group
@@ -728,288 +927,3 @@ fn run_diagnostics_multiple_files(args: &Args) -> Result<()> {
     Ok(())
 }
 
-fn run_type_deps_single_file(args: &Args) -> Result<()> {
-    let input = &args.inputs[0];
-
-    // Load configuration
-    let config = load_analyze_config(args.config.as_deref())?;
-
-    // Canonicalize path
-    let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
-
-    // Detect project root
-    let (root_path, project_type) = if let Some(ref override_root) = args.project_root {
-        let project_type = copier::analyze::ProjectType::Rust; // Default to Rust when overridden
-        (override_root.clone(), project_type)
-    } else {
-        detect_project_root(&input_path)?
-    };
-
-    let project_name = extract_project_name(&root_path, project_type);
-
-    tracing::info!(
-        "Analyzing file: {} in project: {} ({:?}) at root: {}",
-        input.display(),
-        project_name,
-        project_type,
-        root_path.display()
-    );
-
-    // Get LSP server configuration
-    let lsp_config = if let Some(ref cmd) = args.lsp_server {
-        copier::analyze::LspServerConfig::from_command_string(cmd)
-    } else {
-        get_lsp_server_with_config(project_type, Some(&config.lsp_servers))
-    };
-
-    tracing::info!("Starting LSP server: {} {:?}", lsp_config.command, lsp_config.args);
-
-    // Start LSP client
-    let mut client = LspClient::new_with_paths(
-        &lsp_config.command,
-        &lsp_config.args,
-        &root_path,
-        project_type,
-        &config.bin_paths,
-    )?;
-
-    client.initialize()?;
-
-    // Wait for LSP server to complete indexing
-    let timeout_secs = config.lsp_readiness_timeout_secs.unwrap_or(args.lsp_timeout);
-    client.wait_for_indexing(timeout_secs)?;
-
-    // Read file content
-    let content = fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
-
-    tracing::info!("Opening document...");
-    client.did_open(&input_path, &content)?;
-
-    // Get file URI
-    let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-        copier::error::CopierError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid file path for URI conversion",
-        ))
-    })?;
-
-    // Extract symbols
-    let symbols = extract_symbols(&mut client, &file_uri)?;
-    tracing::info!("Extracted {} symbols", symbols.len());
-
-    // Build symbol index
-    let file_symbols = vec![(input_path.clone(), symbols.clone())];
-    let symbol_index = SymbolIndex::build_from_symbols(&file_symbols);
-    tracing::info!("Built symbol index with {} types", symbol_index.len());
-
-    // Extract type references from symbols
-    let type_extractor = TypeExtractor::new(project_type);
-    let mut all_type_refs = Vec::new();
-    for symbol in &symbols {
-        all_type_refs.extend(type_extractor.extract_types(symbol, &file_uri));
-    }
-    tracing::info!("Extracted {} type references", all_type_refs.len());
-
-    // Resolve type references
-    let type_resolver = TypeResolver::new(&symbol_index, true); // use_lsp = true
-    let resolved_types = type_resolver.resolve_types(&all_type_refs, Some(&mut client));
-    tracing::info!("Resolved {} types", resolved_types.len());
-
-    // Shutdown LSP
-    client.shutdown()?;
-
-    // Calculate relative path
-    let relative_path = input_path
-        .strip_prefix(&root_path)
-        .unwrap_or(&input_path)
-        .display()
-        .to_string();
-
-    // Build project type dependencies structure
-    let file_type_deps = copier::analyze::FileTypeDependencies {
-        file_path: relative_path,
-        types: resolved_types,
-    };
-
-    let project_type_deps = copier::analyze::ProjectTypeDependencies {
-        project_name,
-        project_type,
-        files: vec![file_type_deps],
-    };
-
-    // Format output
-    let formatter = get_formatter(args.format.into());
-    let output_text = formatter.format_type_dependencies(&[project_type_deps]);
-
-    // Write output
-    if let Some(ref output_path) = args.output {
-        fs::write(output_path, output_text).map_err(copier::error::CopierError::Io)?;
-        println!("Type dependencies written to: {}", output_path.display());
-    } else {
-        print!("{}", output_text);
-    }
-
-    Ok(())
-}
-
-fn run_type_deps_multiple_files(args: &Args) -> Result<()> {
-    use std::collections::HashMap;
-
-    // Load configuration
-    let config = load_analyze_config(args.config.as_deref())?;
-
-    tracing::info!("Analyzing {} files for type dependencies", args.inputs.len());
-
-    // Group files by (root_path, project_type)
-    let mut file_groups: HashMap<(PathBuf, copier::analyze::ProjectType), Vec<PathBuf>> =
-        HashMap::new();
-
-    for input in &args.inputs {
-        let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
-
-        let (root_path, project_type) = if let Some(ref override_root) = args.project_root {
-            let project_type = copier::analyze::ProjectType::Rust; // Default to Rust when overridden
-            (override_root.clone(), project_type)
-        } else {
-            detect_project_root(&input_path)?
-        };
-
-        file_groups
-            .entry((root_path, project_type))
-            .or_insert_with(Vec::new)
-            .push(input_path);
-    }
-
-    tracing::info!("Found {} project(s)", file_groups.len());
-
-    let mut projects = Vec::new();
-
-    // Process each project group
-    for ((root_path, project_type), files) in file_groups {
-        let project_name = extract_project_name(&root_path, project_type);
-
-        tracing::info!(
-            "Processing {} files in project: {} ({:?})",
-            files.len(),
-            project_name,
-            project_type
-        );
-
-        // Get LSP server configuration
-        let lsp_config = if let Some(ref cmd) = args.lsp_server {
-            copier::analyze::LspServerConfig::from_command_string(cmd)
-        } else {
-            get_lsp_server_with_config(project_type, Some(&config.lsp_servers))
-        };
-
-        // Start LSP client for this project
-        let mut client = LspClient::new_with_paths(
-            &lsp_config.command,
-            &lsp_config.args,
-            &root_path,
-            project_type,
-            &config.bin_paths,
-        )?;
-
-        client.initialize()?;
-
-        // Wait for LSP server to complete indexing
-        let timeout_secs = config.lsp_readiness_timeout_secs.unwrap_or(args.lsp_timeout);
-        client.wait_for_indexing(timeout_secs)?;
-
-        // Collect symbols from all files in this project
-        let mut all_file_symbols = Vec::new();
-
-        for input in &files {
-            let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
-            let content = fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
-
-            client.did_open(&input_path, &content)?;
-
-            let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                copier::error::CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid file path for URI conversion",
-                ))
-            })?;
-
-            let symbols = extract_symbols(&mut client, &file_uri)?;
-            tracing::info!("Extracted {} symbols from {}", symbols.len(), input.display());
-
-            all_file_symbols.push((input_path, symbols));
-        }
-
-        // Build symbol index from all files
-        let symbol_index = SymbolIndex::build_from_symbols(&all_file_symbols);
-        tracing::info!("Built symbol index with {} types", symbol_index.len());
-
-        // Extract and resolve type references for each file
-        let type_extractor = TypeExtractor::new(project_type);
-        let type_resolver = TypeResolver::new(&symbol_index, true); // use_lsp = true
-
-        let mut file_type_dependencies = Vec::new();
-
-        for (input_path, symbols) in &all_file_symbols {
-            // Convert path to URI
-            let file_uri = lsp_types::Url::from_file_path(input_path).map_err(|_| {
-                copier::error::CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid file path for URI conversion",
-                ))
-            })?;
-
-            // Extract type references from this file's symbols
-            let mut type_refs = Vec::new();
-            for symbol in symbols {
-                type_refs.extend(type_extractor.extract_types(symbol, &file_uri));
-            }
-
-            // Resolve type references
-            let resolved_types = type_resolver.resolve_types(&type_refs, Some(&mut client));
-
-            tracing::info!(
-                "Extracted and resolved {} types from {}",
-                resolved_types.len(),
-                input_path.display()
-            );
-
-            // Calculate relative path
-            let relative_path = input_path
-                .strip_prefix(&root_path)
-                .unwrap_or(input_path)
-                .display()
-                .to_string();
-
-            file_type_dependencies.push(copier::analyze::FileTypeDependencies {
-                file_path: relative_path,
-                types: resolved_types,
-            });
-        }
-
-        // Shutdown LSP for this group
-        client.shutdown()?;
-        tracing::info!("Completed type dependency analysis for project: {}", project_name);
-
-        projects.push(copier::analyze::ProjectTypeDependencies {
-            project_name,
-            project_type,
-            files: file_type_dependencies,
-        });
-    }
-
-    // Format output
-    let formatter = get_formatter(args.format.into());
-    let output_text = formatter.format_type_dependencies(&projects);
-
-    // Write output
-    if let Some(ref output_path) = args.output {
-        fs::write(output_path, output_text).map_err(copier::error::CopierError::Io)?;
-        println!("Type dependencies written to: {}", output_path.display());
-    } else {
-        print!("{}", output_text);
-    }
-
-    tracing::info!("Successfully analyzed type dependencies for {} files", args.inputs.len());
-
-    Ok(())
-}
