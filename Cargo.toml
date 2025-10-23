@@ -22,6 +22,7 @@ pulldown-cmark = { version = "0.13", default-features = false, features = [
   "simd",
 ] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 serde_path_to_error = "0.1"
 strum = { version = "0.27", features = ["derive"] }
 thiserror = "2.0"
@@ -31,6 +32,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 globwalk = "0.9"
 glob = "0.3"
 globset = "0.4"
+lsp-types = "0.95"
+tokio = { version = "1", features = ["full"] }
 
 # cargo-binstall support
 # Enables fast binary installation via: cargo binstall copier
@@ -42,3 +45,14 @@ pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-gnu]
 pkg-fmt = "zip"
+
+[[bin]]
+name = "copier"
+path = "src/main.rs"
+
+[[bin]]
+name = "copier-analyze"
+path = "src/bin/analyze.rs"
+
+[dev-dependencies]
+tempfile = "3.8"
