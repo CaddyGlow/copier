@@ -1,7 +1,9 @@
+mod path_hint;
+
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use dialoguer::Confirm;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use tracing::{info, warn};
@@ -57,89 +59,88 @@ enum ParserState {
     InCodeBlock { state: BlockState },
 }
 
-/// Context for parsing markdown events into file blocks
-struct ParserContext {
-    state: ParserState,
-}
+impl ParserState {
+    /// Transition from Idle state to InHeading state
+    fn transition_to_heading(self) -> Self {
+        match self {
+            ParserState::Idle { trailing_text, .. } => ParserState::InHeading {
+                buffer: String::new(),
+                has_inline_code: false,
+                trailing_text,
+            },
+            _ => ParserState::InHeading {
+                buffer: String::new(),
+                has_inline_code: false,
+                trailing_text: String::new(),
+            },
+        }
+    }
 
-impl ParserContext {
-    fn new() -> Self {
-        Self {
-            state: ParserState::Idle {
+    /// Transition from InHeading state to Idle state
+    fn transition_to_idle_from_heading(self) -> Self {
+        match self {
+            ParserState::InHeading {
+                buffer,
+                has_inline_code,
+                trailing_text,
+            } => {
+                let heading_hint = if has_inline_code {
+                    Some(buffer.trim().to_string())
+                } else {
+                    None
+                };
+                ParserState::Idle {
+                    trailing_text,
+                    heading_hint,
+                }
+            }
+            _ => ParserState::Idle {
                 trailing_text: String::new(),
                 heading_hint: None,
             },
         }
     }
 
-    fn start_heading(&mut self) {
-        let trailing_text = match &self.state {
-            ParserState::Idle { trailing_text, .. } => trailing_text.clone(),
-            _ => String::new(),
-        };
-
-        self.state = ParserState::InHeading {
-            buffer: String::new(),
-            has_inline_code: false,
-            trailing_text,
-        };
-    }
-
-    fn end_heading(&mut self) {
-        if let ParserState::InHeading {
-            buffer,
-            has_inline_code,
-            trailing_text,
-        } = std::mem::replace(
-            &mut self.state,
+    /// Transition from Idle state to InCodeBlock state
+    fn transition_to_code_block(self) -> Self {
+        let hint = match self {
             ParserState::Idle {
-                trailing_text: String::new(),
-                heading_hint: None,
-            },
-        ) {
-            let heading_hint = if has_inline_code {
-                Some(buffer.trim().to_string())
-            } else {
-                None
-            };
-
-            self.state = ParserState::Idle {
-                trailing_text,
+                mut trailing_text,
                 heading_hint,
-            };
-        }
-    }
-
-    fn start_code_block(&mut self) {
-        let hint = match &mut self.state {
-            ParserState::Idle {
-                trailing_text,
-                heading_hint,
-            } => acquire_path_hint(trailing_text, heading_hint.take()),
+            } => path_hint::acquire_path_hint(&mut trailing_text, heading_hint),
             _ => None,
         };
-
-        self.state = ParserState::InCodeBlock {
+        ParserState::InCodeBlock {
             state: BlockState::new(hint),
-        };
-    }
-
-    fn end_code_block(&mut self) -> Result<Option<FileBlock>> {
-        if let ParserState::InCodeBlock { state } = std::mem::replace(
-            &mut self.state,
-            ParserState::Idle {
-                trailing_text: String::new(),
-                heading_hint: None,
-            },
-        ) {
-            Ok(Some(state.finish()?))
-        } else {
-            Ok(None)
         }
     }
 
+    /// Transition from InCodeBlock state to Idle state, returning the finished block
+    fn transition_to_idle_from_code_block(self) -> Result<(Self, Option<FileBlock>)> {
+        match self {
+            ParserState::InCodeBlock { state } => {
+                let block = state.finish()?;
+                Ok((
+                    ParserState::Idle {
+                        trailing_text: String::new(),
+                        heading_hint: None,
+                    },
+                    Some(block),
+                ))
+            }
+            _ => Ok((
+                ParserState::Idle {
+                    trailing_text: String::new(),
+                    heading_hint: None,
+                },
+                None,
+            )),
+        }
+    }
+
+    /// Delegate text pushing to the appropriate state variant
     fn push_text(&mut self, text: &str) {
-        match &mut self.state {
+        match self {
             ParserState::Idle { trailing_text, .. } => {
                 trailing_text.push_str(text);
             }
@@ -152,8 +153,9 @@ impl ParserContext {
         }
     }
 
+    /// Delegate code pushing to the appropriate state variant
     fn push_code(&mut self, text: &str) {
-        match &mut self.state {
+        match self {
             ParserState::Idle { trailing_text, .. } => {
                 trailing_text.push_str(text);
             }
@@ -171,8 +173,9 @@ impl ParserContext {
         }
     }
 
+    /// Delegate character pushing to the appropriate state variant
     fn push_char(&mut self, ch: char) {
-        match &mut self.state {
+        match self {
             ParserState::Idle { trailing_text, .. } => {
                 trailing_text.push(ch);
             }
@@ -188,7 +191,10 @@ impl ParserContext {
 
 fn parse_blocks(markdown: &str) -> Result<Vec<FileBlock>> {
     let mut blocks = Vec::new();
-    let mut ctx = ParserContext::new();
+    let mut state = ParserState::Idle {
+        trailing_text: String::new(),
+        heading_hint: None,
+    };
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -198,58 +204,66 @@ fn parse_blocks(markdown: &str) -> Result<Vec<FileBlock>> {
     for event in parser {
         match event {
             Event::Start(Tag::Heading { .. }) => {
-                ctx.start_heading();
+                let old_state = std::mem::replace(
+                    &mut state,
+                    ParserState::Idle {
+                        trailing_text: String::new(),
+                        heading_hint: None,
+                    },
+                );
+                state = old_state.transition_to_heading();
             }
             Event::End(TagEnd::Heading(_)) => {
-                ctx.end_heading();
+                let old_state = std::mem::replace(
+                    &mut state,
+                    ParserState::Idle {
+                        trailing_text: String::new(),
+                        heading_hint: None,
+                    },
+                );
+                state = old_state.transition_to_idle_from_heading();
             }
             Event::Start(Tag::CodeBlock(kind)) => {
                 if !matches!(kind, CodeBlockKind::Fenced(_)) {
                     continue;
                 }
-                ctx.start_code_block();
+                let old_state = std::mem::replace(
+                    &mut state,
+                    ParserState::Idle {
+                        trailing_text: String::new(),
+                        heading_hint: None,
+                    },
+                );
+                state = old_state.transition_to_code_block();
             }
             Event::End(TagEnd::CodeBlock) => {
-                if let Some(block) = ctx.end_code_block()? {
+                let old_state = std::mem::replace(
+                    &mut state,
+                    ParserState::Idle {
+                        trailing_text: String::new(),
+                        heading_hint: None,
+                    },
+                );
+                let (new_state, block) = old_state.transition_to_idle_from_code_block()?;
+                state = new_state;
+                if let Some(block) = block {
                     blocks.push(block);
                 }
             }
             Event::End(TagEnd::Paragraph) => {
                 // Add newline at end of paragraphs to preserve line breaks in trailing text
-                ctx.push_char('\n');
+                state.push_char('\n');
             }
-            Event::Text(text) => ctx.push_text(&text),
-            Event::Code(text) => ctx.push_code(&text),
-            Event::Html(text) | Event::InlineHtml(text) => ctx.push_text(&text),
-            Event::SoftBreak => ctx.push_char('\n'),
-            Event::HardBreak => ctx.push_char('\n'),
+            Event::Text(text) => state.push_text(&text),
+            Event::Code(text) => state.push_code(&text),
+            Event::Html(text) | Event::InlineHtml(text) => state.push_text(&text),
+            Event::SoftBreak => state.push_char('\n'),
+            Event::HardBreak => state.push_char('\n'),
             _ => {}
         }
     }
 
     Ok(blocks)
-}
-
-fn acquire_path_hint(trailing_text: &mut String, heading: Option<String>) -> Option<String> {
-    // Heading takes priority if it was inline code (wrapped in backticks)
-    if let Some(heading) = heading {
-        trailing_text.clear();
-        return Some(heading);
-    }
-
-    // Otherwise, look for trailing text hint
-    let candidate = trailing_text.trim();
-    let hint = candidate.lines().rev().find_map(|line| {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    });
-
-    trailing_text.clear();
-    hint
 }
 
 struct BlockState {
@@ -277,7 +291,8 @@ impl BlockState {
         // Priority order:
         // 1. Comment hint inside code block (most explicit)
         // 2. Path hint from heading or trailing text
-        let path = if let Some(comment_path) = extract_comment_hint(&mut self.contents) {
+        let path = if let Some(comment_path) = path_hint::extract_comment_hint(&mut self.contents)
+        {
             comment_path
         } else if let Some(hint) = self.path_hint.take() {
             hint
@@ -287,58 +302,13 @@ impl BlockState {
             ));
         };
 
-        let path = sanitize_relative(&path)?;
+        let path = path_hint::sanitize_relative(&path)?;
 
         Ok(FileBlock {
             path,
             contents: self.contents,
         })
     }
-}
-
-fn extract_comment_hint(contents: &mut String) -> Option<String> {
-    let prefix_candidates = ["//", "#", ";", "--"];
-    for prefix in &prefix_candidates {
-        let marker = format!("{prefix} ");
-        if contents.starts_with(&marker) {
-            if let Some(idx) = contents.find('\n') {
-                let path = contents[marker.len()..idx].trim().to_string();
-                let remainder = contents[idx + 1..].to_string();
-                *contents = remainder;
-                return Some(path);
-            } else {
-                let path = contents[marker.len()..].trim().to_string();
-                contents.clear();
-                return Some(path);
-            }
-        }
-    }
-    None
-}
-
-fn sanitize_relative(raw: &str) -> Result<Utf8PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err(CopierError::Markdown("empty file path".into()));
-    }
-
-    let candidate = Utf8PathBuf::from(trimmed);
-    if candidate.is_absolute() {
-        return Err(CopierError::Markdown(format!(
-            "absolute paths are not allowed: {trimmed}"
-        )));
-    }
-
-    if candidate
-        .components()
-        .any(|c| matches!(c, Utf8Component::ParentDir))
-    {
-        return Err(CopierError::Markdown(format!(
-            "parent directory segments are not allowed: {trimmed}"
-        )));
-    }
-
-    Ok(candidate)
 }
 
 fn write_block(config: &ExtractConfig, block: &FileBlock) -> Result<()> {
