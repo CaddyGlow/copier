@@ -147,27 +147,26 @@ impl TypeExtractor {
             SymbolKind::STRUCT | SymbolKind::CLASS => {
                 // Extract from field children
                 for child in &symbol.children {
-                    if matches!(child.kind, SymbolKind::FIELD | SymbolKind::PROPERTY) {
-                        if let Some(detail) = &child.detail {
-                            // Calculate where the type annotation starts (after field name and `: `)
-                            let type_annotation_start = child.selection_range.end.character + 2;
+                    if matches!(child.kind, SymbolKind::FIELD | SymbolKind::PROPERTY)
+                        && let Some(detail) = &child.detail {
+                        // Calculate where the type annotation starts (after field name and `: `)
+                        let type_annotation_start = child.selection_range.end.character + 2;
 
-                            for (type_name, offset) in self.extract_type_names_with_offsets(detail)
-                            {
-                                // Position points to the type name within the annotation
-                                let type_position = lsp_types::Position {
-                                    line: child.selection_range.start.line,
-                                    character: type_annotation_start + offset as u32,
-                                };
+                        for (type_name, offset) in self.extract_type_names_with_offsets(detail)
+                        {
+                            // Position points to the type name within the annotation
+                            let type_position = lsp_types::Position {
+                                line: child.selection_range.start.line,
+                                character: type_annotation_start + offset as u32,
+                            };
 
-                                types.push(TypeReference {
-                                    type_name,
-                                    context: TypeContext::StructField,
-                                    position: type_position,
-                                    uri: uri.clone(),
-                                    char_offset: Some(offset as u32),
-                                });
-                            }
+                            types.push(TypeReference {
+                                type_name,
+                                context: TypeContext::StructField,
+                                position: type_position,
+                                uri: uri.clone(),
+                                char_offset: Some(offset as u32),
+                            });
                         }
                     }
                 }
@@ -246,9 +245,9 @@ impl TypeExtractor {
             ProjectType::TypeScript | ProjectType::JavaScript => {
                 // TypeScript: function name(...): ReturnType or (...) => ReturnType
                 if let Some(colon_pos) = detail.rfind("):") {
-                    &detail[colon_pos + 2..].trim()
+                    detail[colon_pos + 2..].trim()
                 } else if let Some(arrow_pos) = detail.rfind("=>") {
-                    &detail[arrow_pos + 2..].trim()
+                    detail[arrow_pos + 2..].trim()
                 } else {
                     ""
                 }
@@ -256,7 +255,7 @@ impl TypeExtractor {
             ProjectType::Python => {
                 // Python: def name(...) -> ReturnType
                 if let Some(arrow_pos) = detail.find("->") {
-                    &detail[arrow_pos + 2..].trim()
+                    detail[arrow_pos + 2..].trim()
                 } else {
                     ""
                 }
@@ -264,7 +263,7 @@ impl TypeExtractor {
             ProjectType::Go => {
                 // Go: func name(...) ReturnType
                 if let Some(close_paren) = detail.find(')') {
-                    &detail[close_paren + 1..].trim()
+                    detail[close_paren + 1..].trim()
                 } else {
                     ""
                 }
@@ -359,10 +358,10 @@ impl TypeExtractor {
 
                 // Extract last component if it's a qualified path
                 let simple_name = if name.contains("::") {
-                    name.split("::").last().unwrap_or(name)
+                    name.rsplit("::").next().unwrap_or(name)
                 } else if name.contains('.') {
                     // Python dotted paths
-                    name.split('.').last().unwrap_or(name)
+                    name.split('.').next_back().unwrap_or(name)
                 } else {
                     name
                 };

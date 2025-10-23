@@ -1,7 +1,7 @@
 use super::SymbolInfo;
 use lsp_types::SymbolKind;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Location where a symbol is defined
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ impl SymbolIndex {
     }
 
     /// Add symbols from a single file
-    fn add_symbols_from_file(&mut self, file_path: &PathBuf, symbols: &[SymbolInfo]) {
+    fn add_symbols_from_file(&mut self, file_path: &Path, symbols: &[SymbolInfo]) {
         for symbol in symbols {
             self.add_symbol(file_path, symbol);
 
@@ -51,7 +51,7 @@ impl SymbolIndex {
     }
 
     /// Add a single symbol to the index
-    fn add_symbol(&mut self, file_path: &PathBuf, symbol: &SymbolInfo) {
+    fn add_symbol(&mut self, file_path: &Path, symbol: &SymbolInfo) {
         // We're primarily interested in type definitions
         let is_type_definition = matches!(
             symbol.kind,
@@ -64,7 +64,7 @@ impl SymbolIndex {
 
         if is_type_definition || should_index_symbol(symbol.kind) {
             let location = SymbolLocation {
-                file_path: file_path.clone(),
+                file_path: file_path.to_path_buf(),
                 line_start: symbol.range.start.line,
                 line_end: symbol.range.end.line,
                 kind: symbol_kind_to_string(symbol.kind).to_string(),
@@ -73,7 +73,7 @@ impl SymbolIndex {
 
             self.symbols
                 .entry(symbol.name.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(location);
         }
     }

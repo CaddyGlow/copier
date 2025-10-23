@@ -75,44 +75,42 @@ impl<'a> TypeResolver<'a> {
         _lsp_cache: &mut HashMap<String, Vec<lsp_types::SymbolInformation>>,
     ) -> TypeResolution {
         // First, check local symbol index (fast path)
-        if let Some(locations) = self.symbol_index.lookup(&type_ref.type_name) {
-            if let Some(location) = Self::find_best_match(locations, &type_ref.type_name) {
-                return TypeResolution::Local {
-                    file_path: location.file_path.clone(),
-                    line: location.line_start,
-                    kind: location.kind.clone(),
-                };
-            }
+        if let Some(locations) = self.symbol_index.lookup(&type_ref.type_name)
+            && let Some(location) = Self::find_best_match(locations, &type_ref.type_name) {
+            return TypeResolution::Local {
+                file_path: location.file_path.clone(),
+                line: location.line_start,
+                kind: location.kind.clone(),
+            };
         }
 
         // If not found locally and LSP is enabled, use typeDefinition
-        if self.use_lsp {
-            if let Some(client) = lsp_client {
-                // Use the position from the TypeReference to request typeDefinition
-                match client.type_definition(&type_ref.uri, type_ref.position) {
-                    Ok(Some(response)) => {
-                        // Extract location from GotoDefinitionResponse
-                        if let Some((uri, range)) = Self::extract_first_location(response) {
-                            return TypeResolution::External {
-                                file_path: uri.to_file_path().ok().map(|p| p.display().to_string()),
-                                line: Some(range.start.line),
-                            };
-                        }
+        if self.use_lsp
+            && let Some(client) = lsp_client {
+            // Use the position from the TypeReference to request typeDefinition
+            match client.type_definition(&type_ref.uri, type_ref.position) {
+                Ok(Some(response)) => {
+                    // Extract location from GotoDefinitionResponse
+                    if let Some((uri, range)) = Self::extract_first_location(response) {
+                        return TypeResolution::External {
+                            file_path: uri.to_file_path().ok().map(|p| p.display().to_string()),
+                            line: Some(range.start.line),
+                        };
                     }
-                    Ok(None) => {
-                        tracing::debug!(
-                            "No typeDefinition found for '{}' at {:?}",
-                            type_ref.type_name,
-                            type_ref.position
-                        );
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to query typeDefinition for '{}': {}",
-                            type_ref.type_name,
-                            e
-                        );
-                    }
+                }
+                Ok(None) => {
+                    tracing::debug!(
+                        "No typeDefinition found for '{}' at {:?}",
+                        type_ref.type_name,
+                        type_ref.position
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to query typeDefinition for '{}': {}",
+                        type_ref.type_name,
+                        e
+                    );
                 }
             }
         }
@@ -170,14 +168,14 @@ pub fn group_by_file(resolved_types: Vec<ResolvedType>) -> HashMap<PathBuf, Vec<
             TypeResolution::Local { file_path, .. } => {
                 by_file
                     .entry(file_path.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(resolved);
             }
             TypeResolution::External { file_path, .. } => {
                 if let Some(path) = file_path {
                     by_file
                         .entry(PathBuf::from(path))
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(resolved);
                 }
             }
@@ -185,7 +183,7 @@ pub fn group_by_file(resolved_types: Vec<ResolvedType>) -> HashMap<PathBuf, Vec<
                 // Group unresolved types separately
                 by_file
                     .entry(PathBuf::from("__unresolved__"))
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(resolved);
             }
         }

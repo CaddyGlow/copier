@@ -4,6 +4,12 @@ use crate::analyze::type_resolver::{ResolvedType, TypeResolution};
 use lsp_types::SymbolKind;
 use serde::Serialize;
 
+/// A file with its path and associated symbols
+type FileSymbols = (String, Vec<SymbolInfo>);
+
+/// A project with its name, type, and files
+type ProjectSymbols = (String, ProjectType, Vec<FileSymbols>);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
     Markdown,
@@ -42,11 +48,8 @@ pub struct ProjectTypeDependencies {
 
 pub trait Formatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String;
-    fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String;
-    fn format_by_projects(
-        &self,
-        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
-    ) -> String;
+    fn format_multiple(&self, files: &[FileSymbols]) -> String;
+    fn format_by_projects(&self, projects: &[ProjectSymbols]) -> String;
     fn format_diagnostics(&self, projects: &[ProjectDiagnostics]) -> String;
     fn format_type_dependencies(&self, projects: &[ProjectTypeDependencies]) -> String;
 }
@@ -164,7 +167,7 @@ impl Formatter for MarkdownFormatter {
             for (file_path, symbols) in files {
                 output.push_str(&format!("### File: `{}`\n\n", file_path));
                 output.push_str(&self.format(symbols, file_path));
-                output.push_str("\n");
+                output.push('\n');
             }
 
             output.push_str("---\n\n");
@@ -294,7 +297,7 @@ impl Formatter for MarkdownFormatter {
                     }
                 }
 
-                output.push_str("\n");
+                output.push('\n');
             }
 
             output.push_str("---\n\n");
@@ -430,7 +433,7 @@ impl Formatter for MarkdownFormatter {
                     }
                 }
 
-                output.push_str("\n");
+                output.push('\n');
             }
 
             output.push_str("---\n\n");
@@ -490,7 +493,7 @@ fn format_diagnostic(diag: &lsp_types::Diagnostic) -> String {
         output.push_str(&format!("  - Code: `{}`\n", code_str));
     }
 
-    output.push_str("\n");
+    output.push('\n');
 
     output
 }
@@ -525,44 +528,43 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
     ));
 
     // Type dependencies
-    if let Some(type_deps) = &symbol.type_dependencies {
-        if !type_deps.is_empty() {
-            output.push_str("**Type Dependencies:**\n\n");
-            for resolved_type in type_deps {
-                match &resolved_type.resolution {
-                    TypeResolution::Local {
-                        file_path,
-                        line,
-                        kind,
-                    } => {
+    if let Some(type_deps) = &symbol.type_dependencies
+        && !type_deps.is_empty() {
+        output.push_str("**Type Dependencies:**\n\n");
+        for resolved_type in type_deps {
+            match &resolved_type.resolution {
+                TypeResolution::Local {
+                    file_path,
+                    line,
+                    kind,
+                } => {
+                    output.push_str(&format!(
+                        "- `{}` → local: `{}:{}` ({})\n",
+                        resolved_type.type_name,
+                        file_path.display(),
+                        line + 1,
+                        kind
+                    ));
+                }
+                TypeResolution::External { file_path, line } => {
+                    if let (Some(path), Some(line_num)) = (file_path, line) {
                         output.push_str(&format!(
-                            "- `{}` → local: `{}:{}` ({})\n",
+                            "- `{}` → external: `{}:{}`\n",
                             resolved_type.type_name,
-                            file_path.display(),
-                            line + 1,
-                            kind
+                            path,
+                            line_num + 1
                         ));
-                    }
-                    TypeResolution::External { file_path, line } => {
-                        if let (Some(path), Some(line_num)) = (file_path, line) {
-                            output.push_str(&format!(
-                                "- `{}` → external: `{}:{}`\n",
-                                resolved_type.type_name,
-                                path,
-                                line_num + 1
-                            ));
-                        } else {
-                            output
-                                .push_str(&format!("- `{}` → external\n", resolved_type.type_name));
-                        }
-                    }
-                    TypeResolution::Unresolved => {
-                        output.push_str(&format!("- `{}` → unresolved\n", resolved_type.type_name));
+                    } else {
+                        output
+                            .push_str(&format!("- `{}` → external\n", resolved_type.type_name));
                     }
                 }
+                TypeResolution::Unresolved => {
+                    output.push_str(&format!("- `{}` → unresolved\n", resolved_type.type_name));
+                }
             }
-            output.push_str("\n");
         }
+        output.push('\n');
     }
 
     // Fields/Members (children)
@@ -580,7 +582,7 @@ fn format_symbol_markdown(symbol: &SymbolInfo) -> String {
                 output.push_str(&format!("  - {}\n", docs.lines().next().unwrap_or("")));
             }
         }
-        output.push_str("\n");
+        output.push('\n');
     }
 
     output

@@ -60,22 +60,19 @@ impl LspClient {
         }
 
         let mut child = command.spawn().map_err(|e| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            CopierError::Io(std::io::Error::other(
                 format!("Failed to spawn LSP server '{}': {}", server_cmd, e),
             ))
         })?;
 
         let stdin = child.stdin.take().ok_or_else(|| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            CopierError::Io(std::io::Error::other(
                 "Failed to capture stdin",
             ))
         })?;
 
         let stdout = child.stdout.take().ok_or_else(|| {
-            CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            CopierError::Io(std::io::Error::other(
                 "Failed to capture stdout",
             ))
         })?;
@@ -101,7 +98,10 @@ impl LspClient {
     pub fn initialize(&mut self) -> Result<InitializeResult> {
         let params = InitializeParams {
             process_id: Some(std::process::id()),
-            root_uri: Some(self.root_uri.clone()),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: self.root_uri.clone(),
+                name: "root".to_string(),
+            }]),
             capabilities: ClientCapabilities {
                 text_document: Some(TextDocumentClientCapabilities {
                     hover: Some(HoverClientCapabilities {
@@ -135,8 +135,7 @@ impl LspClient {
         let response = self.transport.read_response()?;
 
         if let Some(error) = response.error {
-            return Err(CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(CopierError::Io(std::io::Error::other(
                 format!("Initialize error: {}", error.message),
             )));
         }
@@ -168,8 +167,7 @@ impl LspClient {
     /// Open a document in the LSP server
     pub fn did_open(&mut self, file_path: &Path, content: &str) -> Result<()> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(CopierError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
@@ -243,8 +241,7 @@ impl LspClient {
             );
 
             if let Some(error) = response.error {
-                return Err(CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(CopierError::Io(std::io::Error::other(
                     format!("documentSymbol error: {}", error.message),
                 )));
             }
@@ -352,8 +349,7 @@ impl LspClient {
     /// Search for symbols across the workspace by name
     pub fn workspace_symbol(&mut self, query: &str) -> Result<Vec<SymbolInformation>> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(CopierError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
@@ -413,8 +409,7 @@ impl LspClient {
         position: Position,
     ) -> Result<Option<GotoDefinitionResponse>> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(CopierError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
@@ -518,8 +513,7 @@ impl LspClient {
     /// This polls for progress notifications and waits until they're all complete
     pub fn wait_for_indexing(&mut self, timeout_secs: u64) -> Result<()> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(CopierError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }

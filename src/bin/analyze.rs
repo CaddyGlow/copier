@@ -65,7 +65,7 @@ fn collect_external_types(
                 {
                     external_files
                         .entry(path.clone())
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(resolved_type.type_name.clone());
                 }
             }
@@ -341,7 +341,7 @@ fn walk_directory(
         };
 
         // Only process regular files
-        if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
             continue;
         }
 
@@ -546,7 +546,7 @@ fn run_multiple_files(args: &Args) -> Result<()> {
 
         file_groups
             .entry((root_path, project_type))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(input.clone());
     }
 
@@ -554,11 +554,9 @@ fn run_multiple_files(args: &Args) -> Result<()> {
 
     // Process each group with its own LSP client
     // Track projects: (project_name, project_type, Vec<(file_path, symbols)>)
-    let mut projects: Vec<(
-        String,
-        copier::analyze::ProjectType,
-        Vec<(String, Vec<copier::analyze::SymbolInfo>)>,
-    )> = Vec::new();
+    type FileSymbols = (String, Vec<copier::analyze::SymbolInfo>);
+    type ProjectData = (String, copier::analyze::ProjectType, Vec<FileSymbols>);
+    let mut projects: Vec<ProjectData> = Vec::new();
 
     for ((root_path, project_type), files) in file_groups {
         let project_name = extract_project_name(&root_path, project_type);
@@ -879,7 +877,7 @@ fn run_diagnostics_multiple_files(args: &Args) -> Result<()> {
 
         file_groups
             .entry((root_path, project_type))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(input.clone());
     }
 

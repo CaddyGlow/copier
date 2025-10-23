@@ -331,14 +331,13 @@ fn to_utf8_path(path: PathBuf) -> Result<Utf8PathBuf> {
 
 /// Load analyze configuration from a config file
 pub fn load_analyze_config(config_path: Option<&std::path::Path>) -> Result<AnalyzeSection> {
-    if let Some(path) = config_path {
-        if path.exists() {
-            let file_config = parse_file_config(
-                &Utf8PathBuf::from_path_buf(path.to_path_buf())
-                    .map_err(|p| CopierError::InvalidUtfPath(p.to_string_lossy().into_owned()))?,
-            )?;
-            return Ok(file_config.analyze);
-        }
+    if let Some(path) = config_path
+        && path.exists() {
+        let file_config = parse_file_config(
+            &Utf8PathBuf::from_path_buf(path.to_path_buf())
+                .map_err(|p| CopierError::InvalidUtfPath(p.to_string_lossy().into_owned()))?,
+        )?;
+        return Ok(file_config.analyze);
     }
 
     // Try default location
