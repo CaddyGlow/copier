@@ -227,17 +227,17 @@ impl JsonRpcTransport {
     ) {
         match method.as_str() {
             "textDocument/publishDiagnostics" => {
-                if let Some(params) = json.get("params") {
-                    if let Err(e) = Self::handle_diagnostics_static(params, diagnostics) {
-                        tracing::warn!("Failed to handle diagnostics: {}", e);
-                    }
+                if let Some(params) = json.get("params")
+                    && let Err(e) = Self::handle_diagnostics_static(params, diagnostics)
+                {
+                    tracing::warn!("Failed to handle diagnostics: {}", e);
                 }
             }
             "$/progress" => {
-                if let Some(params) = json.get("params") {
-                    if let Err(e) = Self::handle_progress_static(params, progress) {
-                        tracing::warn!("Failed to handle progress: {}", e);
-                    }
+                if let Some(params) = json.get("params")
+                    && let Err(e) = Self::handle_progress_static(params, progress)
+                {
+                    tracing::warn!("Failed to handle progress: {}", e);
                 }
             }
             _ => {
@@ -251,7 +251,7 @@ impl JsonRpcTransport {
                         "result": null
                     });
                     if let Ok(mut stdin_lock) = stdin.lock() {
-                        let _ = Self::write_message_static(&mut *stdin_lock, &response);
+                        let _ = Self::write_message_static(&mut stdin_lock, &response);
                     }
                 } else {
                     tracing::debug!("Reader thread: notification '{}' (ignoring)", method);
@@ -469,8 +469,7 @@ impl JsonRpcTransport {
         let receiver = {
             let mut pending = self.pending_receivers.lock().unwrap();
             pending.remove(&id).ok_or_else(|| {
-                QuickctxError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                QuickctxError::Io(std::io::Error::other(
                     format!("No pending request with id={}", id),
                 ))
             })?

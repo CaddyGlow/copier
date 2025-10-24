@@ -131,7 +131,7 @@ impl SymbolCache {
         let metadata = fs::metadata(file_path).map_err(QuickctxError::Io)?;
         let mtime = metadata
             .modified()
-            .map_err(|e| QuickctxError::Io(e))?
+            .map_err(QuickctxError::Io)?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
                 QuickctxError::Io(std::io::Error::new(
@@ -212,7 +212,7 @@ impl SymbolCache {
         let metadata = fs::metadata(file_path).map_err(QuickctxError::Io)?;
         let mtime = metadata
             .modified()
-            .map_err(|e| QuickctxError::Io(e))?
+            .map_err(QuickctxError::Io)?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
                 QuickctxError::Io(std::io::Error::new(
@@ -299,7 +299,7 @@ impl SymbolCache {
         // Check modification time
         let current_mtime = metadata
             .modified()
-            .map_err(|e| QuickctxError::Io(e))?
+            .map_err(QuickctxError::Io)?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
                 QuickctxError::Io(std::io::Error::new(
@@ -346,7 +346,7 @@ impl SymbolCache {
         // Check modification time
         let current_mtime = metadata
             .modified()
-            .map_err(|e| QuickctxError::Io(e))?
+            .map_err(QuickctxError::Io)?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
                 QuickctxError::Io(std::io::Error::new(

@@ -937,10 +937,11 @@ impl Formatter for CsvFormatter {
                         })
                         .unwrap_or_default();
 
+                    let project_type_str = format!("{:?}", project.project_type);
                     output.push_str(&format!(
                         "{},{},{},{},{},{},{},{}\n",
                         csv_escape(&project.project_name),
-                        format!("{:?}", project.project_type),
+                        project_type_str,
                         csv_escape(&file.file_path.to_string()),
                         severity,
                         diag.range.start.line + 1,
@@ -993,10 +994,11 @@ impl Formatter for CsvFormatter {
                         TypeResolution::Unresolved => ("Unresolved", String::new()),
                     };
 
+                    let project_type_str = format!("{:?}", project.project_type);
                     output.push_str(&format!(
                         "{},{},{},{},{},{},{}\n",
                         csv_escape(&project.project_name),
-                        format!("{:?}", project.project_type),
+                        project_type_str,
                         csv_escape(&file.file_path.to_string()),
                         csv_escape(&typ.type_name),
                         context,
@@ -1044,10 +1046,11 @@ fn format_symbol_csv_with_project(
         .and_then(|d| d.lines().next())
         .unwrap_or("");
 
+    let project_type_str = format!("{:?}", project_type);
     format!(
         "{},{},{},{},{},{},{},{},{}\n",
         csv_escape(project_name),
-        format!("{:?}", project_type),
+        project_type_str,
         csv_escape(file_path),
         symbol_kind_to_string(symbol.kind),
         csv_escape(&symbol.name),
