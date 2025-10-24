@@ -177,8 +177,8 @@ struct Args {
     #[arg(long)]
     diagnostics: bool,
 
-    /// Timeout in seconds to wait for diagnostics (default: 3)
-    #[arg(long, default_value = "3")]
+    /// Timeout in seconds to wait for diagnostics (default: 30)
+    #[arg(long, default_value = "30")]
     diagnostics_timeout: u64,
 
     /// Don't respect .gitignore files when walking directories
@@ -189,8 +189,8 @@ struct Args {
     #[arg(long)]
     hidden: bool,
 
-    /// Timeout in seconds to wait for LSP server readiness (default: 10)
-    #[arg(long, default_value = "10")]
+    /// Timeout in seconds to wait for LSP server readiness (default: 30)
+    #[arg(long, default_value = "30")]
     lsp_timeout: u64,
 }
 
@@ -198,6 +198,7 @@ struct Args {
 enum CliOutputFormat {
     Markdown,
     Json,
+    Csv,
 }
 
 impl From<CliOutputFormat> for OutputFormat {
@@ -205,6 +206,7 @@ impl From<CliOutputFormat> for OutputFormat {
         match format {
             CliOutputFormat::Markdown => OutputFormat::Markdown,
             CliOutputFormat::Json => OutputFormat::Json,
+            CliOutputFormat::Csv => OutputFormat::Csv,
         }
     }
 }
@@ -786,13 +788,19 @@ fn run_diagnostics_single_file(args: &Args) -> Result<()> {
     tracing::info!("Initializing LSP...");
     client.initialize()?;
 
+    // Wait for LSP server to complete indexing
+    let timeout_secs = config
+        .lsp_readiness_timeout_secs
+        .unwrap_or(args.lsp_timeout);
+    client.wait_for_indexing(timeout_secs)?;
+
     // Open document
     tracing::info!("Opening document...");
     client.did_open(&input_path, &content)?;
 
     // Collect diagnostics
     let timeout_ms = args.diagnostics_timeout * 1000;
-    let diagnostics_map = client.collect_diagnostics(timeout_ms)?;
+    let diagnostics_map = client.collect_diagnostics(timeout_ms, Some(1))?;
 
     // Get file URI
     let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
@@ -919,6 +927,12 @@ fn run_diagnostics_multiple_files(args: &Args) -> Result<()> {
         tracing::info!("Initializing LSP...");
         client.initialize()?;
 
+        // Wait for LSP server to complete indexing
+        let timeout_secs = config
+            .lsp_readiness_timeout_secs
+            .unwrap_or(args.lsp_timeout);
+        client.wait_for_indexing(timeout_secs)?;
+
         // Open all documents
         for input in &files {
             let input_path = input
@@ -933,7 +947,7 @@ fn run_diagnostics_multiple_files(args: &Args) -> Result<()> {
 
         // Collect diagnostics
         let timeout_ms = args.diagnostics_timeout * 1000;
-        let diagnostics_map = client.collect_diagnostics(timeout_ms)?;
+        let diagnostics_map = client.collect_diagnostics(timeout_ms, Some(files.len()))?;
 
         // Build file diagnostics
         let mut file_diagnostics = Vec::new();

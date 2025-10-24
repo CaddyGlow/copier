@@ -15,6 +15,7 @@ type ProjectSymbols = (String, ProjectType, Vec<FileSymbols>);
 pub enum OutputFormat {
     Markdown,
     Json,
+    Csv,
 }
 
 /// Diagnostics for a single file
@@ -57,6 +58,7 @@ pub trait Formatter {
 
 pub struct MarkdownFormatter;
 pub struct JsonFormatter;
+pub struct CsvFormatter;
 
 impl Formatter for MarkdownFormatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
@@ -845,10 +847,226 @@ impl Formatter for JsonFormatter {
     }
 }
 
+impl Formatter for CsvFormatter {
+    fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
+        let mut output = String::new();
+
+        // CSV header
+        output.push_str("file,kind,name,line_start,line_end,signature,doc_summary\n");
+
+        // CSV rows
+        for symbol in symbols {
+            output.push_str(&format_symbol_csv(symbol, file_path));
+        }
+
+        output
+    }
+
+    fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String {
+        let mut output = String::new();
+
+        // CSV header
+        output.push_str("file,kind,name,line_start,line_end,signature,doc_summary\n");
+
+        // CSV rows for all files
+        for (file_path, symbols) in files {
+            for symbol in symbols {
+                output.push_str(&format_symbol_csv(symbol, file_path));
+            }
+        }
+
+        output
+    }
+
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String {
+        let mut output = String::new();
+
+        // CSV header
+        output.push_str(
+            "project,project_type,file,kind,name,line_start,line_end,signature,doc_summary\n",
+        );
+
+        // CSV rows
+        for (project_name, project_type, files) in projects {
+            for (file_path, symbols) in files {
+                for symbol in symbols {
+                    output.push_str(&format_symbol_csv_with_project(
+                        symbol,
+                        project_name,
+                        project_type,
+                        file_path,
+                    ));
+                }
+            }
+        }
+
+        output
+    }
+
+    fn format_diagnostics(&self, projects: &[ProjectDiagnostics]) -> String {
+        let mut output = String::new();
+
+        // CSV header
+        output.push_str("project,project_type,file,severity,line,col,code,message\n");
+
+        // CSV rows
+        for project in projects {
+            for file in &project.files {
+                for diag in &file.diagnostics {
+                    let severity = match diag.severity {
+                        Some(lsp_types::DiagnosticSeverity::ERROR) => "Error",
+                        Some(lsp_types::DiagnosticSeverity::WARNING) => "Warning",
+                        Some(lsp_types::DiagnosticSeverity::INFORMATION) => "Info",
+                        Some(lsp_types::DiagnosticSeverity::HINT) => "Hint",
+                        _ => "Unknown",
+                    };
+
+                    let code = diag
+                        .code
+                        .as_ref()
+                        .map(|c| match c {
+                            lsp_types::NumberOrString::Number(n) => n.to_string(),
+                            lsp_types::NumberOrString::String(s) => s.clone(),
+                        })
+                        .unwrap_or_default();
+
+                    output.push_str(&format!(
+                        "{},{},{},{},{},{},{},{}\n",
+                        csv_escape(&project.project_name),
+                        format!("{:?}", project.project_type),
+                        csv_escape(&file.file_path.to_string()),
+                        severity,
+                        diag.range.start.line + 1,
+                        diag.range.start.character + 1,
+                        csv_escape(&code),
+                        csv_escape(&diag.message),
+                    ));
+                }
+            }
+        }
+
+        output
+    }
+
+    fn format_type_dependencies(&self, projects: &[ProjectTypeDependencies]) -> String {
+        let mut output = String::new();
+
+        // CSV header
+        output.push_str("project,project_type,file,type_name,context,resolution,location\n");
+
+        // CSV rows
+        for project in projects {
+            for file in &project.files {
+                for typ in &file.types {
+                    let context = match typ.context {
+                        crate::analyze::type_extractor::TypeContext::FunctionParameter => {
+                            "FunctionParameter"
+                        }
+                        crate::analyze::type_extractor::TypeContext::FunctionReturn => {
+                            "FunctionReturn"
+                        }
+                        crate::analyze::type_extractor::TypeContext::StructField => "StructField",
+                        crate::analyze::type_extractor::TypeContext::TypeAlias => "TypeAlias",
+                        crate::analyze::type_extractor::TypeContext::TraitBound => "TraitBound",
+                    };
+
+                    let (resolution, location) = match &typ.resolution {
+                        TypeResolution::Local {
+                            file_path,
+                            line,
+                            kind,
+                        } => ("Local", format!("{}:{}:{}", file_path, line, kind)),
+                        TypeResolution::External { file_path, line } => {
+                            if let (Some(path), Some(l)) = (file_path, line) {
+                                ("External", format!("{}:{}", path, l))
+                            } else {
+                                ("External", String::new())
+                            }
+                        }
+                        TypeResolution::Unresolved => ("Unresolved", String::new()),
+                    };
+
+                    output.push_str(&format!(
+                        "{},{},{},{},{},{},{}\n",
+                        csv_escape(&project.project_name),
+                        format!("{:?}", project.project_type),
+                        csv_escape(&file.file_path.to_string()),
+                        csv_escape(&typ.type_name),
+                        context,
+                        resolution,
+                        csv_escape(&location),
+                    ));
+                }
+            }
+        }
+
+        output
+    }
+}
+
+fn format_symbol_csv(symbol: &SymbolInfo, file_path: &str) -> String {
+    let signature = symbol.detail.as_deref().unwrap_or("");
+    let doc_summary = symbol
+        .documentation
+        .as_ref()
+        .and_then(|d| d.lines().next())
+        .unwrap_or("");
+
+    format!(
+        "{},{},{},{},{},{},{}\n",
+        csv_escape(file_path),
+        symbol_kind_to_string(symbol.kind),
+        csv_escape(&symbol.name),
+        symbol.range.start.line + 1,
+        symbol.range.end.line + 1,
+        csv_escape(signature),
+        csv_escape(doc_summary),
+    )
+}
+
+fn format_symbol_csv_with_project(
+    symbol: &SymbolInfo,
+    project_name: &str,
+    project_type: &ProjectType,
+    file_path: &str,
+) -> String {
+    let signature = symbol.detail.as_deref().unwrap_or("");
+    let doc_summary = symbol
+        .documentation
+        .as_ref()
+        .and_then(|d| d.lines().next())
+        .unwrap_or("");
+
+    format!(
+        "{},{},{},{},{},{},{},{},{}\n",
+        csv_escape(project_name),
+        format!("{:?}", project_type),
+        csv_escape(file_path),
+        symbol_kind_to_string(symbol.kind),
+        csv_escape(&symbol.name),
+        symbol.range.start.line + 1,
+        symbol.range.end.line + 1,
+        csv_escape(signature),
+        csv_escape(doc_summary),
+    )
+}
+
+fn csv_escape(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn get_formatter(format: OutputFormat) -> Box<dyn Formatter> {
     match format {
         OutputFormat::Markdown => Box::new(MarkdownFormatter),
         OutputFormat::Json => Box::new(JsonFormatter),
+        OutputFormat::Csv => Box::new(CsvFormatter),
     }
 }
 
@@ -900,5 +1118,43 @@ mod tests {
         assert!(output.contains("\"name\": \"foo\""));
         assert!(output.contains("\"kind\": \"Function\""));
         assert!(output.contains("\"documentation\""));
+    }
+
+    #[test]
+    fn test_csv_formatter() {
+        let symbols = vec![
+            create_test_symbol("foo", SymbolKind::FUNCTION),
+            create_test_symbol("Bar", SymbolKind::STRUCT),
+        ];
+
+        let formatter = CsvFormatter;
+        let output = formatter.format(&symbols, "src/test.rs");
+
+        // Check CSV header
+        assert!(output.starts_with("file,kind,name,line_start,line_end,signature,doc_summary\n"));
+
+        // Check data rows
+        assert!(output.contains("src/test.rs,Function,foo"));
+        assert!(output.contains("src/test.rs,Struct,Bar"));
+        assert!(output.contains("fn foo()"));
+        assert!(output.contains("fn Bar()"));
+        assert!(output.contains("Test documentation"));
+    }
+
+    #[test]
+    fn test_csv_escape() {
+        let formatter = CsvFormatter;
+
+        // Create a symbol with commas and quotes in the name
+        let mut symbol = create_test_symbol("test,name", SymbolKind::FUNCTION);
+        symbol.detail = Some("fn test(a: String, b: i32)".to_string());
+        symbol.documentation = Some("A \"quoted\" description".to_string());
+
+        let output = formatter.format(&[symbol], "src/test.rs");
+
+        // Check that fields with commas or quotes are properly escaped
+        assert!(output.contains("\"test,name\""));
+        assert!(output.contains("\"fn test(a: String, b: i32)\""));
+        assert!(output.contains("\"A \"\"quoted\"\" description\""));
     }
 }

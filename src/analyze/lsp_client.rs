@@ -4,10 +4,11 @@ use crate::analyze::project_root::ProjectType;
 use crate::error::{CopierError, Result};
 use lsp_types::*;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 pub struct LspClient {
     transport: JsonRpcTransport,
+    child_process: Option<Child>,
     root_uri: Url,
     project_type: ProjectType,
     initialized: bool,
@@ -87,6 +88,7 @@ impl LspClient {
 
         Ok(Self {
             transport,
+            child_process: Some(child),
             root_uri,
             project_type,
             initialized: false,
@@ -130,8 +132,8 @@ impl LspClient {
             ))
         })?;
 
-        self.transport.send_request("initialize", params_value)?;
-        let response = self.transport.read_response()?;
+        let id = self.transport.send_request("initialize", params_value)?;
+        let response = self.transport.read_response(id)?;
 
         if let Some(error) = response.error {
             return Err(CopierError::Io(std::io::Error::other(format!(
@@ -224,9 +226,10 @@ impl LspClient {
                 ))
             })?;
 
-            self.transport
+            let id = self
+                .transport
                 .send_request("textDocument/documentSymbol", params_value)?;
-            let response = self.transport.read_response()?;
+            let response = self.transport.read_response(id)?;
 
             tracing::debug!(
                 "documentSymbol response (attempt {}): has_error={}, has_result={}, result_is_null={}",
@@ -320,9 +323,10 @@ impl LspClient {
             ))
         })?;
 
-        self.transport
+        let id = self
+            .transport
             .send_request("textDocument/hover", params_value)?;
-        let response = self.transport.read_response()?;
+        let response = self.transport.read_response(id)?;
 
         if let Some(error) = response.error {
             tracing::warn!("Hover error: {}", error.message);
@@ -368,9 +372,10 @@ impl LspClient {
             ))
         })?;
 
-        self.transport
+        let id = self
+            .transport
             .send_request("workspace/symbol", params_value)?;
-        let response = self.transport.read_response()?;
+        let response = self.transport.read_response(id)?;
 
         if let Some(error) = response.error {
             tracing::warn!("workspace/symbol error: {}", error.message);
@@ -431,9 +436,10 @@ impl LspClient {
             ))
         })?;
 
-        self.transport
+        let id = self
+            .transport
             .send_request("textDocument/typeDefinition", params_value)?;
-        let response = self.transport.read_response()?;
+        let response = self.transport.read_response(id)?;
 
         if let Some(error) = response.error {
             tracing::debug!("typeDefinition error at {:?}: {}", position, error.message);
@@ -466,12 +472,32 @@ impl LspClient {
             return Ok(());
         }
 
-        self.transport
+        // Send shutdown request
+        let id = self
+            .transport
             .send_request("shutdown", serde_json::json!(null))?;
-        let _response = self.transport.read_response()?;
+        let _response = self.transport.read_response(id)?;
 
+        // Send exit notification
         self.transport
             .send_notification("exit", serde_json::json!(null))?;
+
+        // Give the server a brief moment to process the exit notification
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Explicitly kill the child process to ensure clean shutdown
+        // This causes stdout to close, which allows the reader thread to exit
+        if let Some(mut child) = self.child_process.take() {
+            match child.kill() {
+                Ok(_) => {
+                    tracing::debug!("LSP server process killed");
+                    let _ = child.wait(); // Reap the zombie process
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to kill LSP server process: {}", e);
+                }
+            }
+        }
 
         tracing::info!("LSP client shutdown");
 
@@ -480,22 +506,99 @@ impl LspClient {
 
     /// Collect diagnostics from the LSP server
     /// Waits for the specified timeout to allow diagnostics to arrive
+    ///
+    /// With the background reader thread, diagnostics notifications are processed
+    /// automatically as they arrive. We just need to poll and wait.
+    ///
+    /// If `expected_file_count` is provided, will only exit early when diagnostics
+    /// have been received for all expected files. Otherwise, exits early when
+    /// diagnostics stabilize.
     pub fn collect_diagnostics(
         &mut self,
         timeout_ms: u64,
+        expected_file_count: Option<usize>,
     ) -> Result<std::collections::HashMap<Url, Vec<lsp_types::Diagnostic>>> {
-        tracing::info!("Waiting {}ms for diagnostics to arrive...", timeout_ms);
+        if let Some(count) = expected_file_count {
+            tracing::info!(
+                "Waiting {}ms for diagnostics to arrive (expecting {} file(s))...",
+                timeout_ms,
+                count
+            );
+        } else {
+            tracing::info!("Waiting {}ms for diagnostics to arrive...", timeout_ms);
+        }
 
-        // Sleep to allow LSP server to send diagnostics notifications
-        std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(timeout_ms);
+        let poll_interval = std::time::Duration::from_millis(100); // Check every 100ms
+
+        // Keep track of whether we've seen any diagnostics
+        let mut last_diag_count = 0;
+        let mut stable_count = 0;
+        let stable_threshold = 3; // Number of polls with same count before considering stable
+
+        while start.elapsed() < timeout {
+            // Sleep briefly to let notifications arrive
+            std::thread::sleep(poll_interval);
+
+            // Check if any diagnostics have arrived
+            let current_diag_count = self.transport.diagnostics_count();
+
+            tracing::debug!("Current diagnostic file count: {}", current_diag_count);
+
+            // Determine if we can exit early
+            let can_exit_early = if let Some(expected_count) = expected_file_count {
+                // If we expect a specific count, only exit when we have all of them
+                if current_diag_count >= expected_count {
+                    tracing::info!(
+                        "Received diagnostics for all {} expected file(s), exiting early",
+                        expected_count
+                    );
+                    true
+                } else {
+                    false
+                }
+            } else {
+                // Otherwise, exit when diagnostics stabilize
+                if current_diag_count > 0 && current_diag_count == last_diag_count {
+                    stable_count += 1;
+                    if stable_count >= stable_threshold {
+                        tracing::info!(
+                            "Diagnostics appear stable at {} file(s), exiting early",
+                            current_diag_count
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    stable_count = 0;
+                    false
+                }
+            };
+
+            if can_exit_early {
+                break;
+            }
+
+            last_diag_count = current_diag_count;
+        }
 
         // Take all diagnostics that arrived
         let diagnostics_by_uri = self.transport.take_diagnostics();
 
-        tracing::info!(
-            "Collected diagnostics for {} file(s)",
-            diagnostics_by_uri.len()
-        );
+        if let Some(expected_count) = expected_file_count {
+            tracing::info!(
+                "Collected diagnostics for {} file(s) (expected {})",
+                diagnostics_by_uri.len(),
+                expected_count
+            );
+        } else {
+            tracing::info!(
+                "Collected diagnostics for {} file(s)",
+                diagnostics_by_uri.len()
+            );
+        }
 
         // Convert String URIs to Url type
         let mut result = std::collections::HashMap::new();
@@ -589,5 +692,16 @@ impl LspClient {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for LspClient {
+    fn drop(&mut self) {
+        // Ensure the child process is killed when the client is dropped
+        if let Some(mut child) = self.child_process.take() {
+            tracing::debug!("Cleaning up LSP server process in Drop");
+            let _ = child.kill();
+            let _ = child.wait(); // Reap zombie
+        }
     }
 }
