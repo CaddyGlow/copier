@@ -460,4 +460,154 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_cache_invalidation_on_size_change() -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = SymbolCache::new(Some(temp_dir.path().to_path_buf()))?;
+
+        // Create a test file
+        let test_file = temp_dir.path().join("test.rs");
+        fs::write(&test_file, "fn main() {}").unwrap();
+
+        // Save to cache
+        let symbols = vec![];
+        cache.save_symbols(&test_file, symbols.clone(), ProjectType::Rust)?;
+
+        // Verify cache hit
+        assert!(cache.get_symbols(&test_file, ProjectType::Rust)?.is_some());
+
+        // Modify file size without preserving mtime
+        fs::write(&test_file, "fn main() {}\n// more content").unwrap();
+
+        // Cache should be invalid due to size change
+        assert!(cache.get_symbols(&test_file, ProjectType::Rust)?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cache_project_type_mismatch() -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = SymbolCache::new(Some(temp_dir.path().to_path_buf()))?;
+
+        // Create a test file
+        let test_file = temp_dir.path().join("test.rs");
+        fs::write(&test_file, "fn main() {}").unwrap();
+
+        // Save as Rust
+        let symbols = vec![];
+        cache.save_symbols(&test_file, symbols.clone(), ProjectType::Rust)?;
+
+        // Try to retrieve as Python - should be cache miss
+        assert!(
+            cache
+                .get_symbols(&test_file, ProjectType::Python)?
+                .is_none()
+        );
+
+        // But Rust should still work
+        assert!(cache.get_symbols(&test_file, ProjectType::Rust)?.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cache_clear() -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = SymbolCache::new(Some(temp_dir.path().to_path_buf()))?;
+
+        // Create test files and cache them
+        let test_file1 = temp_dir.path().join("test1.rs");
+        let test_file2 = temp_dir.path().join("test2.rs");
+        fs::write(&test_file1, "fn main() {}").unwrap();
+        fs::write(&test_file2, "fn foo() {}").unwrap();
+
+        let symbols = vec![];
+        cache.save_symbols(&test_file1, symbols.clone(), ProjectType::Rust)?;
+        cache.save_external(&test_file2, symbols.clone())?;
+
+        // Verify both are cached
+        assert!(cache.get_symbols(&test_file1, ProjectType::Rust)?.is_some());
+        assert!(cache.get_external(&test_file2)?.is_some());
+
+        // Clear cache
+        cache.clear()?;
+
+        // Both should be cache misses now
+        assert!(cache.get_symbols(&test_file1, ProjectType::Rust)?.is_none());
+        assert!(cache.get_external(&test_file2)?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cache_miss_nonexistent_file() -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = SymbolCache::new(Some(temp_dir.path().to_path_buf()))?;
+
+        let nonexistent = temp_dir.path().join("does_not_exist.rs");
+
+        // Should return None without error
+        assert!(
+            cache
+                .get_symbols(&nonexistent, ProjectType::Rust)?
+                .is_none()
+        );
+        assert!(cache.get_external(&nonexistent)?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cache_multiple_files() -> Result<()> {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = SymbolCache::new(Some(temp_dir.path().to_path_buf()))?;
+
+        // Create multiple test files
+        let files: Vec<_> = (0..5)
+            .map(|i| {
+                let path = temp_dir.path().join(format!("test{}.rs", i));
+                fs::write(&path, format!("fn func{}() {{}}", i)).unwrap();
+                path
+            })
+            .collect();
+
+        let symbols = vec![];
+
+        // Cache all files
+        for (i, file) in files.iter().enumerate() {
+            cache.save_symbols(file, symbols.clone(), ProjectType::Rust)?;
+
+            // Verify all previously cached files are still accessible
+            for j in 0..=i {
+                assert!(
+                    cache.get_symbols(&files[j], ProjectType::Rust)?.is_some(),
+                    "File {} should be cached after caching file {}",
+                    j,
+                    i
+                );
+            }
+        }
+
+        // Modify one file
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        fs::write(&files[2], "fn func2() {}\n// modified").unwrap();
+
+        // Only file 2 should be invalid
+        for (i, file) in files.iter().enumerate() {
+            let cached = cache.get_symbols(file, ProjectType::Rust)?;
+            if i == 2 {
+                assert!(cached.is_none(), "Modified file {} should be cache miss", i);
+            } else {
+                assert!(
+                    cached.is_some(),
+                    "Unmodified file {} should be cache hit",
+                    i
+                );
+            }
+        }
+
+        Ok(())
+    }
 }
