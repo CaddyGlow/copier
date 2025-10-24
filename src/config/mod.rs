@@ -405,4 +405,8 @@ pub struct AnalyzeSection {
     pub bin_paths: Vec<String>,
     #[serde(default)]
     pub lsp_readiness_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub enable_cache: Option<bool>,
+    #[serde(default)]
+    pub cache_dir: Option<PathBuf>,
 }

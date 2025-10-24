@@ -2,11 +2,12 @@ use super::lsp_client::LspClient;
 use super::path_types::FilePath;
 use super::symbol_index::{SymbolIndex, SymbolLocation};
 use super::type_extractor::{TypeContext, TypeReference};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// A resolved type with its definition location
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResolvedType {
     pub type_name: String,
     pub context: TypeContext,
@@ -14,7 +15,7 @@ pub struct ResolvedType {
 }
 
 /// Where a type is defined
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TypeResolution {
     /// Type found in analyzed files (local)
     Local {

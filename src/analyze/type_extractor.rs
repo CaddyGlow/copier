@@ -1,6 +1,7 @@
 use super::SymbolInfo;
 use super::project_root::ProjectType;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// A type reference extracted from a symbol
@@ -14,7 +15,7 @@ pub struct TypeReference {
 }
 
 /// Context where a type is used
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TypeContext {
     FunctionParameter,
     FunctionReturn,

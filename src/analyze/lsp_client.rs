@@ -534,13 +534,14 @@ impl LspClient {
         let poll_interval = std::time::Duration::from_millis(100); // Check every 100ms
 
         // Create progress bar if we have expected count and progress display
-        let progress_bar = if let (Some(count), Some(display)) = (expected_file_count, progress_display) {
-            let pb = display.progress_bar(count as u64, "[3/3]");
-            pb.set_message("Collecting diagnostics");
-            Some(pb)
-        } else {
-            None
-        };
+        let progress_bar =
+            if let (Some(count), Some(display)) = (expected_file_count, progress_display) {
+                let pb = display.progress_bar(count as u64, "[3/3]");
+                pb.set_message("Collecting diagnostics");
+                Some(pb)
+            } else {
+                None
+            };
 
         // Keep track of whether we've seen any diagnostics
         let mut last_diag_count = 0;

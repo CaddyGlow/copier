@@ -1,8 +1,8 @@
 use clap::Parser;
 use copier::analyze::{
-    LspClient, OutputFormat, ProjectType, RelativePath, SymbolIndex, SymbolInfo, TypeExtractor,
-    TypeResolver, detect_project_root, extract_project_name, extract_symbols, get_formatter,
-    get_lsp_server_with_config, has_lsp_support, LspServerConfig,
+    LspClient, LspServerConfig, OutputFormat, ProjectType, RelativePath, SymbolCache, SymbolIndex,
+    SymbolInfo, TypeExtractor, TypeResolver, detect_project_root, extract_project_name,
+    extract_symbols, get_formatter, get_lsp_server_with_config, has_lsp_support,
 };
 use copier::config::{AnalyzeSection, load_analyze_config};
 use copier::error::Result;
@@ -26,6 +26,71 @@ struct ProcessingContext<'a> {
     config: &'a AnalyzeSection,
     progress: &'a copier::analyze::progress::ProgressDisplay,
     args: &'a Args,
+    cache: Option<&'a SymbolCache>,
+}
+
+/// Parse symbol filter from file or comma-separated string
+fn parse_symbol_filter(filter_arg: &str) -> Result<Vec<String>> {
+    use std::collections::HashSet;
+
+    let filter_path = PathBuf::from(filter_arg);
+
+    let names: Vec<String> = if filter_path.exists() && filter_path.is_file() {
+        // Read from file - parse lines like "symbol_name (kind) - file:line"
+        let content = fs::read_to_string(&filter_path).map_err(copier::error::CopierError::Io)?;
+
+        content
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    return None;
+                }
+
+                // Parse format: "symbol_name (kind) - file:line"
+                // Extract just the symbol name (everything before the first space or '(')
+                let name = line
+                    .split(&[' ', '('][..])
+                    .next()
+                    .map(|s| s.trim().to_string());
+
+                name
+            })
+            .collect()
+    } else {
+        // Treat as comma-separated list
+        filter_arg
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+
+    // Deduplicate
+    let unique_names: HashSet<String> = names.into_iter().collect();
+    Ok(unique_names.into_iter().collect())
+}
+
+/// Filter symbols to only those matching the given names (recursive)
+fn filter_symbols_by_names(symbols: Vec<SymbolInfo>, filter_names: &[String]) -> Vec<SymbolInfo> {
+    symbols
+        .into_iter()
+        .filter_map(|mut symbol| {
+            let matches = filter_names.contains(&symbol.name);
+
+            // Recursively filter children
+            if !symbol.children.is_empty() {
+                symbol.children = filter_symbols_by_names(symbol.children, filter_names);
+            }
+
+            // Keep if name matches or has matching children
+            if matches || !symbol.children.is_empty() {
+                Some(symbol)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 /// Recursively populate type dependencies for symbols
@@ -106,6 +171,7 @@ fn fetch_external_symbols(
     external_files: &std::collections::HashMap<String, std::collections::HashSet<String>>,
     client: &mut LspClient,
     progress: Option<&copier::analyze::progress::ProgressDisplay>,
+    cache: Option<&SymbolCache>,
 ) -> Result<Vec<SymbolInfo>> {
     let mut external_symbols = Vec::new();
     let pb = progress.map(|p| {
@@ -120,42 +186,111 @@ fn fetch_external_symbols(
         }
         let path = PathBuf::from(file_path);
 
-        // Read the external file
-        let content = match fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::warn!("Failed to read external file {}: {}", file_path, e);
-                continue;
-            }
-        };
+        // Try to get from cache first
+        let symbols = if let Some(cache) = cache {
+            match cache.get_external(&path) {
+                Ok(Some(cached_symbols)) => {
+                    tracing::info!("Using cached external types for {}", file_path);
+                    cached_symbols
+                }
+                Ok(None) | Err(_) => {
+                    // Cache miss or error - fetch via LSP
+                    let content = match fs::read_to_string(&path) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!("Failed to read external file {}: {}", file_path, e);
+                            if let Some(ref bar) = pb {
+                                bar.inc(1);
+                            }
+                            continue;
+                        }
+                    };
 
-        // Convert to URI
-        let file_uri = match lsp_types::Url::from_file_path(&path) {
-            Ok(uri) => uri,
-            Err(_) => {
-                tracing::warn!("Failed to convert path to URI: {}", file_path);
-                continue;
-            }
-        };
+                    let file_uri = match lsp_types::Url::from_file_path(&path) {
+                        Ok(uri) => uri,
+                        Err(_) => {
+                            tracing::warn!("Failed to convert path to URI: {}", file_path);
+                            if let Some(ref bar) = pb {
+                                bar.inc(1);
+                            }
+                            continue;
+                        }
+                    };
 
-        // Open document in LSP
-        if let Err(e) = client.did_open(&path, &content) {
-            tracing::warn!("Failed to open external file in LSP: {}", e);
-            continue;
-        }
+                    if let Err(e) = client.did_open(&path, &content) {
+                        tracing::warn!("Failed to open external file in LSP: {}", e);
+                        if let Some(ref bar) = pb {
+                            bar.inc(1);
+                        }
+                        continue;
+                    }
 
-        // Extract symbols
-        match extract_symbols(client, &file_uri) {
-            Ok(symbols) => {
-                // Filter to only the symbols we need
-                for symbol in symbols {
-                    if symbol_names.contains(&symbol.name) {
-                        external_symbols.push(symbol);
+                    match extract_symbols(client, &file_uri) {
+                        Ok(symbols) => {
+                            // Save to cache
+                            if let Err(e) = cache.save_external(&path, symbols.clone()) {
+                                tracing::warn!("Failed to save external types to cache: {}", e);
+                            }
+                            symbols
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to extract symbols from {}: {}", file_path, e);
+                            if let Some(ref bar) = pb {
+                                bar.inc(1);
+                            }
+                            continue;
+                        }
                     }
                 }
             }
-            Err(e) => {
-                tracing::warn!("Failed to extract symbols from {}: {}", file_path, e);
+        } else {
+            // Cache disabled - fetch via LSP
+            let content = match fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Failed to read external file {}: {}", file_path, e);
+                    if let Some(ref bar) = pb {
+                        bar.inc(1);
+                    }
+                    continue;
+                }
+            };
+
+            let file_uri = match lsp_types::Url::from_file_path(&path) {
+                Ok(uri) => uri,
+                Err(_) => {
+                    tracing::warn!("Failed to convert path to URI: {}", file_path);
+                    if let Some(ref bar) = pb {
+                        bar.inc(1);
+                    }
+                    continue;
+                }
+            };
+
+            if let Err(e) = client.did_open(&path, &content) {
+                tracing::warn!("Failed to open external file in LSP: {}", e);
+                if let Some(ref bar) = pb {
+                    bar.inc(1);
+                }
+                continue;
+            }
+
+            match extract_symbols(client, &file_uri) {
+                Ok(symbols) => symbols,
+                Err(e) => {
+                    tracing::warn!("Failed to extract symbols from {}: {}", file_path, e);
+                    if let Some(ref bar) = pb {
+                        bar.inc(1);
+                    }
+                    continue;
+                }
+            }
+        };
+
+        // Filter to only the symbols we need
+        for symbol in symbols {
+            if symbol_names.contains(&symbol.name) {
+                external_symbols.push(symbol);
             }
         }
 
@@ -218,7 +353,10 @@ fn with_lsp_client<F, R>(
 where
     F: FnOnce(&mut LspClient) -> Result<R>,
 {
-    let spinner = progress.spinner(format!("Starting LSP server ({})", project.lsp_config.command));
+    let spinner = progress.spinner(format!(
+        "Starting LSP server ({})",
+        project.lsp_config.command
+    ));
     let mut client = LspClient::new_with_paths(
         &project.lsp_config.command,
         &project.lsp_config.args,
@@ -264,11 +402,7 @@ trait ProcessingMode {
         ctx: &ProcessingContext,
     ) -> Result<Self::ProjectOutput>;
 
-    fn format_output(
-        &self,
-        outputs: Vec<Self::ProjectOutput>,
-        format: OutputFormat,
-    ) -> String;
+    fn format_output(&self, outputs: Vec<Self::ProjectOutput>, format: OutputFormat) -> String;
 }
 
 /// Symbol extraction mode
@@ -293,23 +427,70 @@ impl ProcessingMode for SymbolMode {
         for input in files {
             pb.set_message(format!("Extracting symbols\n{}", input.display()));
 
-            let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
-            let content = fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
+            let input_path = input
+                .canonicalize()
+                .map_err(copier::error::CopierError::Io)?;
 
-            let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                copier::error::CopierError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid file path",
-                ))
-            })?;
+            // Try to get symbols from cache first
+            let symbols = if let Some(cache) = ctx.cache {
+                match cache.get_symbols(&input_path, project.project_type)? {
+                    Some(cached_symbols) => {
+                        tracing::info!("Using cached symbols for {}", input.display());
+                        cached_symbols
+                    }
+                    None => {
+                        // Cache miss - extract via LSP
+                        let content = fs::read_to_string(&input_path)
+                            .map_err(copier::error::CopierError::Io)?;
 
-            tracing::info!("Opening document: {}", input.display());
-            client.did_open(&input_path, &content)?;
+                        let file_uri =
+                            lsp_types::Url::from_file_path(&input_path).map_err(|_| {
+                                copier::error::CopierError::Io(std::io::Error::new(
+                                    std::io::ErrorKind::InvalidInput,
+                                    "Invalid file path",
+                                ))
+                            })?;
 
-            tracing::info!("Extracting symbols...");
-            let symbols = extract_symbols(client, &file_uri)?;
+                        tracing::info!("Opening document: {}", input.display());
+                        client.did_open(&input_path, &content)?;
 
-            tracing::info!("Found {} symbols in {}", symbols.len(), input.display());
+                        tracing::info!("Extracting symbols...");
+                        let symbols = extract_symbols(client, &file_uri)?;
+
+                        tracing::info!("Found {} symbols in {}", symbols.len(), input.display());
+
+                        // Save to cache
+                        if let Err(e) =
+                            cache.save_symbols(&input_path, symbols.clone(), project.project_type)
+                        {
+                            tracing::warn!("Failed to save symbols to cache: {}", e);
+                        }
+
+                        symbols
+                    }
+                }
+            } else {
+                // Cache disabled - extract via LSP
+                let content =
+                    fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
+
+                let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
+                    copier::error::CopierError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Invalid file path",
+                    ))
+                })?;
+
+                tracing::info!("Opening document: {}", input.display());
+                client.did_open(&input_path, &content)?;
+
+                tracing::info!("Extracting symbols...");
+                let symbols = extract_symbols(client, &file_uri)?;
+
+                tracing::info!("Found {} symbols in {}", symbols.len(), input.display());
+
+                symbols
+            };
 
             all_file_symbols.push((input_path, symbols));
             pb.inc(1);
@@ -325,7 +506,9 @@ impl ProcessingMode for SymbolMode {
         let type_extractor = TypeExtractor::new(project.project_type);
         let type_resolver = TypeResolver::new(&symbol_index, true);
         let mut project_files = Vec::new();
-        let pb2 = ctx.progress.progress_bar(all_file_symbols.len() as u64, "[3/4]");
+        let pb2 = ctx
+            .progress
+            .progress_bar(all_file_symbols.len() as u64, "[3/4]");
         pb2.set_message("Resolving types");
 
         for (input_path, symbols) in &all_file_symbols {
@@ -371,6 +554,26 @@ impl ProcessingMode for SymbolMode {
         pb2.finish_and_clear();
         eprintln!("[3/4] ✓ Resolving types");
 
+        // Apply symbol filter if specified
+        if let Some(ref filter_arg) = ctx.args.filter_symbols {
+            let filter_names = parse_symbol_filter(filter_arg)?;
+            tracing::info!("Filtering to {} symbol(s)", filter_names.len());
+
+            project_files = project_files
+                .into_iter()
+                .map(|(path, symbols)| {
+                    let filtered = filter_symbols_by_names(symbols, &filter_names);
+                    (path, filtered)
+                })
+                .filter(|(_, symbols)| !symbols.is_empty())
+                .collect();
+
+            tracing::info!(
+                "Filtered to {} file(s) with matching symbols",
+                project_files.len()
+            );
+        }
+
         // Collect and fetch external type definitions
         let all_symbols: Vec<&SymbolInfo> = project_files
             .iter()
@@ -385,7 +588,7 @@ impl ProcessingMode for SymbolMode {
                 external_files.len(),
                 project.project_name
             );
-            match fetch_external_symbols(&external_files, client, Some(ctx.progress)) {
+            match fetch_external_symbols(&external_files, client, Some(ctx.progress), ctx.cache) {
                 Ok(external_symbols) => {
                     if !external_symbols.is_empty() {
                         tracing::info!(
@@ -410,11 +613,7 @@ impl ProcessingMode for SymbolMode {
         ))
     }
 
-    fn format_output(
-        &self,
-        outputs: Vec<Self::ProjectOutput>,
-        format: OutputFormat,
-    ) -> String {
+    fn format_output(&self, outputs: Vec<Self::ProjectOutput>, format: OutputFormat) -> String {
         let formatter = get_formatter(format);
         formatter.format_by_projects(&outputs)
     }
@@ -442,8 +641,11 @@ impl ProcessingMode for DiagnosticsMode {
 
         for input in files {
             pb.set_message(format!("Opening files\n{}", input.display()));
-            let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
-            let content = fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
+            let input_path = input
+                .canonicalize()
+                .map_err(copier::error::CopierError::Io)?;
+            let content =
+                fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
 
             tracing::info!("Opening document: {}", input.display());
             client.did_open(&input_path, &content)?;
@@ -460,7 +662,9 @@ impl ProcessingMode for DiagnosticsMode {
         let mut file_diagnostics = Vec::new();
 
         for input in files {
-            let input_path = input.canonicalize().map_err(copier::error::CopierError::Io)?;
+            let input_path = input
+                .canonicalize()
+                .map_err(copier::error::CopierError::Io)?;
 
             let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
                 copier::error::CopierError::Io(std::io::Error::new(
@@ -496,11 +700,7 @@ impl ProcessingMode for DiagnosticsMode {
         })
     }
 
-    fn format_output(
-        &self,
-        outputs: Vec<Self::ProjectOutput>,
-        format: OutputFormat,
-    ) -> String {
+    fn format_output(&self, outputs: Vec<Self::ProjectOutput>, format: OutputFormat) -> String {
         let formatter = get_formatter(format);
         formatter.format_diagnostics(&outputs)
     }
@@ -561,6 +761,18 @@ struct Args {
     /// Timeout in seconds to wait for LSP server readiness (default: 30)
     #[arg(long, default_value = "30")]
     lsp_timeout: u64,
+
+    /// Filter to only specific symbol names (one per line, or comma-separated)
+    #[arg(long, value_name = "FILE_OR_NAMES")]
+    filter_symbols: Option<String>,
+
+    /// Disable symbol cache (force fresh extraction)
+    #[arg(long)]
+    no_cache: bool,
+
+    /// Clear the cache before running
+    #[arg(long)]
+    clear_cache: bool,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -569,6 +781,7 @@ enum CliOutputFormat {
     Json,
     Csv,
     Compact,
+    SymbolList,
 }
 
 impl From<CliOutputFormat> for OutputFormat {
@@ -578,6 +791,7 @@ impl From<CliOutputFormat> for OutputFormat {
             CliOutputFormat::Json => OutputFormat::Json,
             CliOutputFormat::Csv => OutputFormat::Csv,
             CliOutputFormat::Compact => OutputFormat::Compact,
+            CliOutputFormat::SymbolList => OutputFormat::SymbolList,
         }
     }
 }
@@ -610,6 +824,23 @@ fn run(args: Args) -> Result<()> {
     // Create progress display based on verbosity
     let progress = copier::analyze::progress::ProgressDisplay::new(args.verbose);
 
+    // Load configuration to get cache settings
+    let config = load_analyze_config(args.config.as_deref())?;
+
+    // Initialize cache (if enabled)
+    let cache = if !args.no_cache && config.enable_cache.unwrap_or(true) {
+        let cache = SymbolCache::new(config.cache_dir.clone())?;
+
+        // Clear cache if requested
+        if args.clear_cache {
+            cache.clear()?;
+        }
+
+        Some(cache)
+    } else {
+        None
+    };
+
     // Validate all input paths exist
     for input in &args.inputs {
         if !input.exists() {
@@ -622,7 +853,12 @@ fn run(args: Args) -> Result<()> {
 
     // Expand inputs: files stay as-is, directories are walked recursively
     let respect_gitignore = !args.no_gitignore;
-    let expanded_files = expand_inputs(&args.inputs, respect_gitignore, args.hidden, Some(&progress))?;
+    let expanded_files = expand_inputs(
+        &args.inputs,
+        respect_gitignore,
+        args.hidden,
+        Some(&progress),
+    )?;
 
     if expanded_files.is_empty() {
         return Err(copier::error::CopierError::InvalidArgument(
@@ -641,9 +877,9 @@ fn run(args: Args) -> Result<()> {
         let mode = DiagnosticsMode {
             timeout_ms: expanded_args.diagnostics_timeout * 1000,
         };
-        process_with_mode(&expanded_args, mode, &progress)
+        process_with_mode(&expanded_args, mode, &progress, cache.as_ref())
     } else {
-        process_with_mode(&expanded_args, SymbolMode, &progress)
+        process_with_mode(&expanded_args, SymbolMode, &progress, cache.as_ref())
     }
 }
 
@@ -662,7 +898,13 @@ fn expand_inputs(
             files.push(input.clone());
         } else if input.is_dir() {
             // Walk directory recursively
-            walk_directory(input, respect_gitignore, include_hidden, &mut files, progress)?;
+            walk_directory(
+                input,
+                respect_gitignore,
+                include_hidden,
+                &mut files,
+                progress,
+            )?;
         }
     }
 
@@ -741,6 +983,7 @@ fn process_with_mode<M: ProcessingMode>(
     args: &Args,
     mode: M,
     progress: &copier::analyze::progress::ProgressDisplay,
+    cache: Option<&SymbolCache>,
 ) -> Result<()> {
     let config = load_analyze_config(args.config.as_deref())?;
     let file_groups = group_files_by_project(&args.inputs, args)?;
@@ -776,19 +1019,25 @@ fn process_with_mode<M: ProcessingMode>(
             lsp_config,
         };
 
-        let timeout_secs = config.lsp_readiness_timeout_secs.unwrap_or(args.lsp_timeout);
+        let timeout_secs = config
+            .lsp_readiness_timeout_secs
+            .unwrap_or(args.lsp_timeout);
 
         let output = with_lsp_client(&project_ctx, &config, progress, timeout_secs, |client| {
             let ctx = ProcessingContext {
                 config: &config,
                 progress,
                 args,
+                cache,
             };
             mode.process_files(client, &files, &project_ctx, &ctx)
         })?;
 
         all_outputs.push(output);
-        tracing::info!("Completed processing for project: {}", project_ctx.project_name);
+        tracing::info!(
+            "Completed processing for project: {}",
+            project_ctx.project_name
+        );
     }
 
     // Format and write output
@@ -798,4 +1047,3 @@ fn process_with_mode<M: ProcessingMode>(
     tracing::info!("Successfully processed {} files", args.inputs.len());
     Ok(())
 }
-

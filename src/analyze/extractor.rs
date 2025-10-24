@@ -2,8 +2,9 @@ use crate::analyze::lsp_client::LspClient;
 use crate::analyze::type_resolver::ResolvedType;
 use crate::error::Result;
 use lsp_types::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SymbolInfo {
     pub name: String,
     pub kind: SymbolKind,

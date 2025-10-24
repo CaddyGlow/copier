@@ -75,11 +75,7 @@ impl ProgressDisplay {
     }
 
     /// Create a progress bar that shows percentage
-    pub fn progress_bar_with_percentage(
-        &self,
-        len: u64,
-        prefix: impl Into<String>,
-    ) -> ProgressBar {
+    pub fn progress_bar_with_percentage(&self, len: u64, prefix: impl Into<String>) -> ProgressBar {
         if !self.enabled {
             return ProgressBar::hidden();
         }

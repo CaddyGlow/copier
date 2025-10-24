@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{ChildStdin, ChildStdout};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
@@ -175,17 +175,14 @@ impl JsonRpcTransport {
 
             // Route message based on type
             // Check for method field first (notification or server request)
-            let method_opt = json.get("method").and_then(|m| m.as_str()).map(|s| s.to_string());
+            let method_opt = json
+                .get("method")
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string());
 
             if let Some(method) = method_opt {
                 // It's a notification or server request
-                Self::handle_notification_or_request(
-                    json,
-                    method,
-                    &stdin,
-                    &diagnostics,
-                    &progress,
-                );
+                Self::handle_notification_or_request(json, method, &stdin, &diagnostics, &progress);
             } else if let Some(id) = json.get("id").and_then(|i| i.as_u64()) {
                 // It's a response to one of our requests
                 Self::route_response(json, id, &pending_responses);
@@ -354,7 +351,11 @@ impl JsonRpcTransport {
                         .get("message")
                         .and_then(|m| m.as_str())
                         .map(|s| s.to_string());
-                    tracing::debug!("Progress begin: {} - {}", title, message.as_deref().unwrap_or(""));
+                    tracing::debug!(
+                        "Progress begin: {} - {}",
+                        title,
+                        message.as_deref().unwrap_or("")
+                    );
                     ProgressState::Begin { title, message }
                 }
                 "report" => {
@@ -373,7 +374,10 @@ impl JsonRpcTransport {
                         message.as_deref().unwrap_or(""),
                         percentage.unwrap_or(0)
                     );
-                    ProgressState::Report { message, percentage }
+                    ProgressState::Report {
+                        message,
+                        percentage,
+                    }
                 }
                 "end" => {
                     let message = params
@@ -561,9 +565,7 @@ impl Drop for JsonRpcTransport {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
 
-            tracing::warn!(
-                "Reader thread did not exit within timeout, detaching"
-            );
+            tracing::warn!("Reader thread did not exit within timeout, detaching");
             // Just drop the handle - thread will be detached and continue until process exits
         }
     }

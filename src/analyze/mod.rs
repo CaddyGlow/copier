@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod extractor;
 pub mod formatter;
 pub mod jsonrpc;
@@ -10,6 +11,7 @@ pub mod symbol_index;
 pub mod type_extractor;
 pub mod type_resolver;
 
+pub use cache::SymbolCache;
 pub use extractor::{SymbolInfo, extract_symbols};
 pub use formatter::{
     FileDiagnostics, FileTypeDependencies, Formatter, JsonFormatter, MarkdownFormatter,

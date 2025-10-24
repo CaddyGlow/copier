@@ -17,6 +17,7 @@ pub enum OutputFormat {
     Json,
     Csv,
     Compact,
+    SymbolList,
 }
 
 /// Diagnostics for a single file
@@ -61,6 +62,7 @@ pub struct MarkdownFormatter;
 pub struct JsonFormatter;
 pub struct CsvFormatter;
 pub struct CompactFormatter;
+pub struct SymbolListFormatter;
 
 impl Formatter for MarkdownFormatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
@@ -1069,10 +1071,7 @@ impl Formatter for CompactFormatter {
         let mut output = String::new();
 
         // File header with line count (we'll use range end as approximation)
-        let max_line = symbols.iter()
-            .map(|s| s.range.end.line)
-            .max()
-            .unwrap_or(0) + 1;
+        let max_line = symbols.iter().map(|s| s.range.end.line).max().unwrap_or(0) + 1;
         output.push_str(&format!("{} ({} lines)\n", file_path, max_line));
 
         // Format symbols as tree
@@ -1095,11 +1094,17 @@ impl Formatter for CompactFormatter {
         output
     }
 
-    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String {
         let mut output = String::new();
 
         for (project_name, project_type, files) in projects {
-            output.push_str(&format!("# Project: {} ({:?})\n\n", project_name, project_type));
+            output.push_str(&format!(
+                "# Project: {} ({:?})\n\n",
+                project_name, project_type
+            ));
 
             for (file_path, symbols) in files {
                 output.push_str(&self.format(symbols, file_path));
@@ -1114,7 +1119,10 @@ impl Formatter for CompactFormatter {
         let mut output = String::new();
 
         for project in projects {
-            output.push_str(&format!("# Project: {} ({:?})\n\n", project.project_name, project.project_type));
+            output.push_str(&format!(
+                "# Project: {} ({:?})\n\n",
+                project.project_name, project.project_type
+            ));
 
             for file in &project.files {
                 output.push_str(&format!("{}\n", file.file_path));
@@ -1147,17 +1155,25 @@ impl Formatter for CompactFormatter {
         let mut output = String::new();
 
         for project in projects {
-            output.push_str(&format!("# Project: {} ({:?})\n\n", project.project_name, project.project_type));
+            output.push_str(&format!(
+                "# Project: {} ({:?})\n\n",
+                project.project_name, project.project_type
+            ));
 
             for file in &project.files {
                 output.push_str(&format!("{}\n", file.file_path));
 
                 for typ in &file.types {
                     let location = match &typ.resolution {
-                        TypeResolution::Local { file_path, line, .. } => {
+                        TypeResolution::Local {
+                            file_path, line, ..
+                        } => {
                             format!("→ {}:{}", file_path, line)
                         }
-                        TypeResolution::External { file_path: Some(p), line: Some(l) } => {
+                        TypeResolution::External {
+                            file_path: Some(p),
+                            line: Some(l),
+                        } => {
                             format!("→ ext:{}:{}", p, l)
                         }
                         TypeResolution::External { .. } => "→ ext".to_string(),
@@ -1182,8 +1198,12 @@ fn format_symbol_tree(output: &mut String, symbol: &SymbolInfo, prefix: &str, is
 
     // Format the symbol line: ├─ visibility name signature :line
     let visibility = match symbol.kind {
-        SymbolKind::MODULE | SymbolKind::FUNCTION | SymbolKind::STRUCT |
-        SymbolKind::ENUM | SymbolKind::INTERFACE | SymbolKind::CLASS => "pub ",
+        SymbolKind::MODULE
+        | SymbolKind::FUNCTION
+        | SymbolKind::STRUCT
+        | SymbolKind::ENUM
+        | SymbolKind::INTERFACE
+        | SymbolKind::CLASS => "pub ",
         _ => "",
     };
 
@@ -1212,19 +1232,24 @@ fn format_symbol_tree(output: &mut String, symbol: &SymbolInfo, prefix: &str, is
             .trim_start_matches("const ")
             .trim_start_matches("let ");
 
-        format!("{}{}", symbol.name,
+        format!(
+            "{}{}",
+            symbol.name,
             if clean_detail.starts_with(&symbol.name) {
                 &clean_detail[symbol.name.len()..]
             } else {
                 ""
-            })
+            }
+        )
     } else {
         symbol.name.clone()
     };
 
     let line_num = symbol.selection_range.start.line + 1;
-    output.push_str(&format!("{}{}{}{}{} :{}\n",
-        prefix, branch, visibility, kind_prefix, signature, line_num));
+    output.push_str(&format!(
+        "{}{}{}{}{} :{}\n",
+        prefix, branch, visibility, kind_prefix, signature, line_num
+    ));
 
     // Format children with indentation
     if !symbol.children.is_empty() {
@@ -1237,12 +1262,71 @@ fn format_symbol_tree(output: &mut String, symbol: &SymbolInfo, prefix: &str, is
     }
 }
 
+impl Formatter for SymbolListFormatter {
+    fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
+        let mut output = String::new();
+
+        fn collect_symbols(symbols: &[SymbolInfo], file_path: &str, output: &mut String) {
+            for symbol in symbols {
+                let line = symbol.selection_range.start.line + 1;
+                let kind = symbol_kind_to_string(symbol.kind);
+
+                // Format: symbol_name (kind) - file:line
+                output.push_str(&format!(
+                    "{} ({}) - {}:{}\n",
+                    symbol.name, kind, file_path, line
+                ));
+
+                // Recursively collect children
+                if !symbol.children.is_empty() {
+                    collect_symbols(&symbol.children, file_path, output);
+                }
+            }
+        }
+
+        collect_symbols(symbols, file_path, &mut output);
+        output
+    }
+
+    fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String {
+        let mut output = String::new();
+
+        for (file_path, symbols) in files {
+            output.push_str(&self.format(symbols, file_path));
+        }
+
+        output
+    }
+
+    fn format_by_projects(
+        &self,
+        projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)],
+    ) -> String {
+        let mut output = String::new();
+
+        for (_project_name, _project_type, files) in projects {
+            output.push_str(&self.format_multiple(files));
+        }
+
+        output
+    }
+
+    fn format_diagnostics(&self, _projects: &[ProjectDiagnostics]) -> String {
+        String::from("# Diagnostics output not supported in symbol-list format\n")
+    }
+
+    fn format_type_dependencies(&self, _projects: &[ProjectTypeDependencies]) -> String {
+        String::from("# Type dependencies output not supported in symbol-list format\n")
+    }
+}
+
 pub fn get_formatter(format: OutputFormat) -> Box<dyn Formatter> {
     match format {
         OutputFormat::Markdown => Box::new(MarkdownFormatter),
         OutputFormat::Json => Box::new(JsonFormatter),
         OutputFormat::Csv => Box::new(CsvFormatter),
         OutputFormat::Compact => Box::new(CompactFormatter),
+        OutputFormat::SymbolList => Box::new(SymbolListFormatter),
     }
 }
 
