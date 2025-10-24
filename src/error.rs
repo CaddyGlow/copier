@@ -2,10 +2,10 @@ use std::io;
 
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, CopierError>;
+pub type Result<T> = std::result::Result<T, QuickctxError>;
 
 #[derive(Debug, Error)]
-pub enum CopierError {
+pub enum QuickctxError {
     #[error("invalid utf-8 path: {0}")]
     InvalidUtfPath(String),
 

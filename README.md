@@ -1,4 +1,4 @@
-# Copier
+# Quickctx
 
 A bidirectional file content aggregator and extractor that converts between files and markdown-formatted representations.
 
@@ -18,12 +18,12 @@ A bidirectional file content aggregator and extractor that converts between file
 
 **Unix-like systems (Linux, macOS, Android):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CaddyGlow/copier/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CaddyGlow/quickctx/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/CaddyGlow/copier/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/CaddyGlow/quickctx/main/scripts/install.ps1 | iex
 ```
 
 For custom installation options, see [scripts/install.sh](scripts/install.sh) or [scripts/install.ps1](scripts/install.ps1).
@@ -32,21 +32,21 @@ For custom installation options, see [scripts/install.sh](scripts/install.sh) or
 
 ```bash
 # Install from crates.io
-cargo install copier
+cargo install quickctx
 
 # Or use cargo-binstall for faster binary installation
-cargo binstall copier
+cargo binstall quickctx
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/CaddyGlow/copier.git
-cd copier
+git clone https://github.com/CaddyGlow/quickctx.git
+cd quickctx
 cargo build --release
 ```
 
-The binary will be available at `target/release/copier`.
+The binary will be available at `target/release/quickctx`.
 
 ## Quick Start
 
@@ -56,16 +56,16 @@ Convert files to markdown:
 
 ```bash
 # Aggregate specific files
-copier file1.rs file2.rs
+quickctx file1.rs file2.rs
 
 # Aggregate entire directory
-copier src/
+quickctx src/
 
 # Use glob patterns
-copier "src/**/*.rs"
+quickctx "src/**/*.rs"
 
 # Output to file
-copier src/ -o project.md
+quickctx src/ -o project.md
 ```
 
 ### Extract Files
@@ -74,13 +74,13 @@ Convert markdown back to files:
 
 ```bash
 # Extract from file
-copier extract project.md
+quickctx extract project.md
 
 # Extract from stdin
-cat project.md | copier extract
+cat project.md | quickctx extract
 
 # Extract to specific directory
-copier extract project.md -o restored/
+quickctx extract project.md -o restored/
 ```
 
 ## Usage
@@ -88,7 +88,7 @@ copier extract project.md -o restored/
 ### Aggregation Mode
 
 ```bash
-copier [OPTIONS] <PATHS>...
+quickctx [OPTIONS] <PATHS>...
 
 Options:
   -o, --output <FILE>          Write output to file instead of stdout
@@ -106,7 +106,7 @@ Options:
 ### Extraction Mode
 
 ```bash
-copier extract [OPTIONS] <INPUT>
+quickctx extract [OPTIONS] <INPUT>
 
 Options:
   -o, --output <DIR>           Output directory [default: .]
@@ -154,7 +154,7 @@ int main() {
 
 ## Smart Fence Detection
 
-Copier automatically detects code fences in your files and adjusts the delimiter to avoid conflicts:
+Quickctx automatically detects code fences in your files and adjusts the delimiter to avoid conflicts:
 
 **Input file contains:**
 ````markdown
@@ -176,25 +176,25 @@ let x = 42;
 
 ## Gitignore Support
 
-By default, copier respects `.gitignore` files:
+By default, quickctx respects `.gitignore` files:
 
 ```bash
 # Respects .gitignore (default)
-copier src/
+quickctx src/
 
 # Include ignored files
-copier src/ --no-gitignore
+quickctx src/ --no-gitignore
 
 # Use custom ignore file
-copier src/ --ignore-file .customignore
+quickctx src/ --ignore-file .customignore
 
 # Add additional exclude patterns
-copier src/ --exclude "*.tmp" --exclude "*.bak"
+quickctx src/ --exclude "*.tmp" --exclude "*.bak"
 ```
 
 ## Configuration File
 
-Create a `copier.toml` file for project-specific settings:
+Create a `quickctx.toml` file for project-specific settings:
 
 ```toml
 [general]
@@ -214,7 +214,7 @@ conflict = "skip"
 Use it with:
 
 ```bash
-copier --config copier.toml src/
+quickctx --config quickctx.toml src/
 ```
 
 ## Examples
@@ -224,7 +224,7 @@ copier --config copier.toml src/
 Aggregate your project files to share with others:
 
 ```bash
-copier src/ tests/ -f comment -o share.md
+quickctx src/ tests/ -f comment -o share.md
 ```
 
 ### Example 2: AI-Assisted Development
@@ -232,7 +232,7 @@ copier src/ tests/ -f comment -o share.md
 Export your codebase to feed into an AI assistant:
 
 ```bash
-copier "src/**/*.rs" "tests/**/*.rs" --format heading -o context.md
+quickctx "src/**/*.rs" "tests/**/*.rs" --format heading -o context.md
 ```
 
 ### Example 3: Documentation
@@ -240,7 +240,7 @@ copier "src/**/*.rs" "tests/**/*.rs" --format heading -o context.md
 Extract code examples from documentation:
 
 ```bash
-copier extract API_EXAMPLES.md -o examples/
+quickctx extract API_EXAMPLES.md -o examples/
 ```
 
 ### Example 4: Project Templates
@@ -249,10 +249,10 @@ Create project templates as markdown:
 
 ```bash
 # Create template
-copier template-project/ -o rust-template.md
+quickctx template-project/ -o rust-template.md
 
 # Instantiate template
-copier extract rust-template.md -o my-new-project/
+quickctx extract rust-template.md -o my-new-project/
 ```
 
 ## Use Cases
@@ -328,4 +328,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-If you encounter any issues or have questions, please [open an issue](https://github.com/CaddyGlow/copier/issues).
+If you encounter any issues or have questions, please [open an issue](https://github.com/CaddyGlow/quickctx/issues).

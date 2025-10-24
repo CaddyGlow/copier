@@ -134,7 +134,7 @@ jobs:
       - name: Package artifact
         run: |
           mkdir -p dist
-          BIN="copier"
+          BIN="quickctx"
           TARGET="${{ matrix.target }}"
           VERSION="${{ github.ref_name }}"
           if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
@@ -152,7 +152,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: copier-${{ matrix.target }}
+          name: quickctx-${{ matrix.target }}
           path: |
             dist/*.tar.gz
             dist/*.zip

@@ -1,12 +1,12 @@
 [package]
-name = "copier"
+name = "quickctx"
 version = "0.1.1"
 edition = "2024"
-authors = ["Copier Contributors"]
+authors = ["Quickctx Contributors"]
 description = "A bidirectional file content aggregator and extractor that converts between files and markdown-formatted representations"
 license = "MIT"
-repository = "https://github.com/CaddyGlow/copier"
-homepage = "https://github.com/CaddyGlow/copier"
+repository = "https://github.com/CaddyGlow/quickctx"
+homepage = "https://github.com/CaddyGlow/quickctx"
 readme = "README.md"
 keywords = ["markdown", "aggregator", "extractor", "cli", "files"]
 categories = ["command-line-utilities", "text-processing", "development-tools"]
@@ -35,7 +35,7 @@ regex = "1.10"
 indicatif = "0.17"
 
 # cargo-binstall support
-# Enables fast binary installation via: cargo binstall copier
+# Enables fast binary installation via: cargo binstall quickctx
 # Supports installation from pre-built GitHub release binaries
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
@@ -46,11 +46,11 @@ pkg-fmt = "tgz"
 pkg-fmt = "zip"
 
 [[bin]]
-name = "copier"
+name = "quickctx"
 path = "src/main.rs"
 
 [[bin]]
-name = "copier-analyze"
+name = "quickctx-analyze"
 path = "src/bin/analyze.rs"
 
 [dev-dependencies]

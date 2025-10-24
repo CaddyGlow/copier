@@ -1,4 +1,4 @@
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -469,7 +469,7 @@ impl JsonRpcTransport {
         let receiver = {
             let mut pending = self.pending_receivers.lock().unwrap();
             pending.remove(&id).ok_or_else(|| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("No pending request with id={}", id),
                 ))
@@ -480,7 +480,7 @@ impl JsonRpcTransport {
         let response = receiver
             .recv_timeout(std::time::Duration::from_secs(10))
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     format!("Timeout waiting for response id={}: {}", id, e),
                 ))
@@ -496,7 +496,7 @@ impl JsonRpcTransport {
     /// Write a message with LSP headers
     fn write_message<T: Serialize>(&mut self, message: &T) -> Result<()> {
         let json = serde_json::to_string(message).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize message: {}", e),
             ))
@@ -507,8 +507,8 @@ impl JsonRpcTransport {
         let mut stdin = self.stdin.lock().unwrap();
         stdin
             .write_all(content.as_bytes())
-            .map_err(CopierError::Io)?;
-        stdin.flush().map_err(CopierError::Io)?;
+            .map_err(QuickctxError::Io)?;
+        stdin.flush().map_err(QuickctxError::Io)?;
 
         tracing::debug!("Sent: {}", json);
 

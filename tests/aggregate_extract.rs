@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 
 use camino::Utf8PathBuf;
 
-use copier::aggregate;
-use copier::config::{
+use quickctx::aggregate;
+use quickctx::config::{
     AggregateConfig, AppContext, ConflictStrategy, ExtractConfig, FencePreference, InputSource,
     OutputFormat,
 };
-use copier::extract;
+use quickctx::extract;
 
 struct TempDir {
     path: PathBuf,
@@ -20,7 +20,7 @@ impl TempDir {
         let mut base = env::temp_dir();
         let pid = std::process::id();
         for attempt in 0..1000 {
-            base.push(format!("copier-test-{}-{}", pid, attempt));
+            base.push(format!("quickctx-test-{}-{}", pid, attempt));
             if fs::create_dir(&base).is_ok() {
                 return Self { path: base };
             }

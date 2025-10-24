@@ -1,5 +1,5 @@
 use crate::analyze::{ProjectType, SymbolInfo};
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -49,8 +49,8 @@ impl SymbolCache {
         let external_dir = cache_root.join("external");
 
         // Create cache directories if they don't exist
-        fs::create_dir_all(&symbols_dir).map_err(CopierError::Io)?;
-        fs::create_dir_all(&external_dir).map_err(CopierError::Io)?;
+        fs::create_dir_all(&symbols_dir).map_err(QuickctxError::Io)?;
+        fs::create_dir_all(&external_dir).map_err(QuickctxError::Io)?;
 
         tracing::debug!("Cache initialized at: {}", cache_root.display());
 
@@ -61,19 +61,19 @@ impl SymbolCache {
         })
     }
 
-    /// Get the default cache directory (~/.cache/copier/analyze)
+    /// Get the default cache directory (~/.cache/quickctx/analyze)
     fn default_cache_dir() -> Result<PathBuf> {
         let cache_base = if let Ok(xdg_cache) = std::env::var("XDG_CACHE_HOME") {
             PathBuf::from(xdg_cache)
         } else if let Ok(home) = std::env::var("HOME") {
             PathBuf::from(home).join(".cache")
         } else {
-            return Err(CopierError::Config(
+            return Err(QuickctxError::Config(
                 "Could not determine cache directory: HOME not set".to_string(),
             ));
         };
 
-        Ok(cache_base.join("copier").join("analyze"))
+        Ok(cache_base.join("quickctx").join("analyze"))
     }
 
     /// Generate cache key from file path
@@ -100,12 +100,12 @@ impl SymbolCache {
         // Read cache entry
         let cache_json = fs::read_to_string(&cache_file).map_err(|e| {
             tracing::warn!("Failed to read cache file: {}", e);
-            CopierError::Io(e)
+            QuickctxError::Io(e)
         })?;
 
         let entry: SymbolCacheEntry = serde_json::from_str(&cache_json).map_err(|e| {
             tracing::warn!("Failed to parse cache file: {}", e);
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid cache format: {}", e),
             ))
@@ -128,13 +128,13 @@ impl SymbolCache {
         symbols: Vec<SymbolInfo>,
         project_type: ProjectType,
     ) -> Result<()> {
-        let metadata = fs::metadata(file_path).map_err(CopierError::Io)?;
+        let metadata = fs::metadata(file_path).map_err(QuickctxError::Io)?;
         let mtime = metadata
             .modified()
-            .map_err(|e| CopierError::Io(e))?
+            .map_err(|e| QuickctxError::Io(e))?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Invalid mtime: {}", e),
                 ))
@@ -151,17 +151,17 @@ impl SymbolCache {
 
         let key = Self::cache_key(file_path);
         let cache_dir = self.symbols_dir.join(&key);
-        fs::create_dir_all(&cache_dir).map_err(CopierError::Io)?;
+        fs::create_dir_all(&cache_dir).map_err(QuickctxError::Io)?;
 
         let cache_file = cache_dir.join("cache.json");
         let cache_json = serde_json::to_string_pretty(&entry).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize cache: {}", e),
             ))
         })?;
 
-        fs::write(&cache_file, cache_json).map_err(CopierError::Io)?;
+        fs::write(&cache_file, cache_json).map_err(QuickctxError::Io)?;
         tracing::debug!("Cached symbols for {}", file_path.display());
 
         Ok(())
@@ -183,12 +183,12 @@ impl SymbolCache {
         // Read cache entry
         let cache_json = fs::read_to_string(&cache_file).map_err(|e| {
             tracing::warn!("Failed to read external cache file: {}", e);
-            CopierError::Io(e)
+            QuickctxError::Io(e)
         })?;
 
         let entry: ExternalTypeCacheEntry = serde_json::from_str(&cache_json).map_err(|e| {
             tracing::warn!("Failed to parse external cache file: {}", e);
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Invalid cache format: {}", e),
             ))
@@ -209,13 +209,13 @@ impl SymbolCache {
 
     /// Save external type definitions to cache
     pub fn save_external(&self, file_path: &Path, symbols: Vec<SymbolInfo>) -> Result<()> {
-        let metadata = fs::metadata(file_path).map_err(CopierError::Io)?;
+        let metadata = fs::metadata(file_path).map_err(QuickctxError::Io)?;
         let mtime = metadata
             .modified()
-            .map_err(|e| CopierError::Io(e))?
+            .map_err(|e| QuickctxError::Io(e))?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Invalid mtime: {}", e),
                 ))
@@ -231,17 +231,17 @@ impl SymbolCache {
 
         let key = Self::cache_key(file_path);
         let cache_dir = self.external_dir.join(&key);
-        fs::create_dir_all(&cache_dir).map_err(CopierError::Io)?;
+        fs::create_dir_all(&cache_dir).map_err(QuickctxError::Io)?;
 
         let cache_file = cache_dir.join("cache.json");
         let cache_json = serde_json::to_string_pretty(&entry).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize external cache: {}", e),
             ))
         })?;
 
-        fs::write(&cache_file, cache_json).map_err(CopierError::Io)?;
+        fs::write(&cache_file, cache_json).map_err(QuickctxError::Io)?;
         tracing::debug!("Cached external types for {}", file_path.display());
 
         Ok(())
@@ -250,12 +250,12 @@ impl SymbolCache {
     /// Clear all cached data
     pub fn clear(&self) -> Result<()> {
         if self.cache_root.exists() {
-            fs::remove_dir_all(&self.cache_root).map_err(CopierError::Io)?;
+            fs::remove_dir_all(&self.cache_root).map_err(QuickctxError::Io)?;
             tracing::info!("Cache cleared: {}", self.cache_root.display());
 
             // Recreate the directories
-            fs::create_dir_all(&self.symbols_dir).map_err(CopierError::Io)?;
-            fs::create_dir_all(&self.external_dir).map_err(CopierError::Io)?;
+            fs::create_dir_all(&self.symbols_dir).map_err(QuickctxError::Io)?;
+            fs::create_dir_all(&self.external_dir).map_err(QuickctxError::Io)?;
         }
         Ok(())
     }
@@ -299,10 +299,10 @@ impl SymbolCache {
         // Check modification time
         let current_mtime = metadata
             .modified()
-            .map_err(|e| CopierError::Io(e))?
+            .map_err(|e| QuickctxError::Io(e))?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Invalid mtime: {}", e),
                 ))
@@ -346,10 +346,10 @@ impl SymbolCache {
         // Check modification time
         let current_mtime = metadata
             .modified()
-            .map_err(|e| CopierError::Io(e))?
+            .map_err(|e| QuickctxError::Io(e))?
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Invalid mtime: {}", e),
                 ))

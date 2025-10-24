@@ -6,7 +6,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use tracing::{debug, warn};
 
 use crate::config::{AggregateConfig, AppContext};
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use crate::utils;
 
 use super::FileEntry;
@@ -149,7 +149,7 @@ fn build_exclude_set(patterns: &[String]) -> Result<Option<GlobSet>> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
         let glob = Glob::new(pattern).map_err(|err| {
-            CopierError::InvalidArgument(format!("invalid exclude pattern {pattern}: {err}"))
+            QuickctxError::InvalidArgument(format!("invalid exclude pattern {pattern}: {err}"))
         })?;
         builder.add(glob);
     }
@@ -157,5 +157,5 @@ fn build_exclude_set(patterns: &[String]) -> Result<Option<GlobSet>> {
     builder
         .build()
         .map(Some)
-        .map_err(|err| CopierError::InvalidArgument(format!("failed to build glob set: {err}")))
+        .map_err(|err| QuickctxError::InvalidArgument(format!("failed to build glob set: {err}")))
 }

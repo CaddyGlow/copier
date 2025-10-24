@@ -7,7 +7,7 @@ use crate::config::{ConflictStrategy, FencePreference, OutputFormat};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Path to a configuration file (defaults to copier.toml if present)
+    /// Path to a configuration file (defaults to quickctx.toml if present)
     #[arg(long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 

@@ -1,6 +1,6 @@
 use camino::{Utf8Component, Utf8PathBuf};
 
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 
 /// Acquires a path hint from trailing text or heading
 ///
@@ -62,12 +62,12 @@ pub fn extract_comment_hint(contents: &mut String) -> Option<String> {
 pub fn sanitize_relative(raw: &str) -> Result<Utf8PathBuf> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(CopierError::Markdown("empty file path".into()));
+        return Err(QuickctxError::Markdown("empty file path".into()));
     }
 
     let candidate = Utf8PathBuf::from(trimmed);
     if candidate.is_absolute() {
-        return Err(CopierError::Markdown(format!(
+        return Err(QuickctxError::Markdown(format!(
             "absolute paths are not allowed: {trimmed}"
         )));
     }
@@ -76,7 +76,7 @@ pub fn sanitize_relative(raw: &str) -> Result<Utf8PathBuf> {
         .components()
         .any(|c| matches!(c, Utf8Component::ParentDir))
     {
-        return Err(CopierError::Markdown(format!(
+        return Err(QuickctxError::Markdown(format!(
             "parent directory segments are not allowed: {trimmed}"
         )));
     }

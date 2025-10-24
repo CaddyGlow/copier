@@ -7,7 +7,7 @@ use serde::Deserialize;
 use strum::{Display, EnumString};
 
 use crate::cli::{AggregateArgs, Cli, Commands, ExtractArgs};
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 
 #[derive(
     Debug, Clone, Copy, ValueEnum, Deserialize, Display, EnumString, PartialEq, Eq, Default,
@@ -77,7 +77,7 @@ pub struct AggregateConfig {
 impl AggregateConfig {
     pub fn require_inputs(&self) -> Result<()> {
         if self.inputs.is_empty() {
-            return Err(CopierError::InvalidArgument(
+            return Err(QuickctxError::InvalidArgument(
                 "no input paths were provided".to_string(),
             ));
         }
@@ -278,7 +278,7 @@ fn resolve_config_path(cli: &Cli, cwd: &Utf8Path) -> Option<Utf8PathBuf> {
         return to_utf8_path(path.clone()).ok();
     }
 
-    let default = cwd.join("copier.toml");
+    let default = cwd.join("quickctx.toml");
     if default.exists() {
         Some(default)
     } else {
@@ -316,17 +316,17 @@ fn build_extract_config(
 
 fn parse_file_config(path: &Utf8Path) -> Result<FileConfig> {
     let raw = fs::read_to_string(path)
-        .map_err(|e| CopierError::Config(format!("failed to read {}: {}", path, e)))?;
+        .map_err(|e| QuickctxError::Config(format!("failed to read {}: {}", path, e)))?;
     let de = toml::de::Deserializer::parse(&raw)
-        .map_err(|err| CopierError::ConfigParse(err.to_string()))?;
+        .map_err(|err| QuickctxError::ConfigParse(err.to_string()))?;
     let file_config: FileConfig = serde_path_to_error::deserialize(de)
-        .map_err(|err| CopierError::ConfigParse(err.to_string()))?;
+        .map_err(|err| QuickctxError::ConfigParse(err.to_string()))?;
     Ok(file_config)
 }
 
 fn to_utf8_path(path: PathBuf) -> Result<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(path)
-        .map_err(|p| CopierError::InvalidUtfPath(p.to_string_lossy().into_owned()))
+        .map_err(|p| QuickctxError::InvalidUtfPath(p.to_string_lossy().into_owned()))
 }
 
 /// Load analyze configuration from a config file
@@ -336,13 +336,13 @@ pub fn load_analyze_config(config_path: Option<&std::path::Path>) -> Result<Anal
     {
         let file_config = parse_file_config(
             &Utf8PathBuf::from_path_buf(path.to_path_buf())
-                .map_err(|p| CopierError::InvalidUtfPath(p.to_string_lossy().into_owned()))?,
+                .map_err(|p| QuickctxError::InvalidUtfPath(p.to_string_lossy().into_owned()))?,
         )?;
         return Ok(file_config.analyze);
     }
 
     // Try default location
-    let default_path = Utf8PathBuf::from("copier.toml");
+    let default_path = Utf8PathBuf::from("quickctx.toml");
     if default_path.exists() {
         let file_config = parse_file_config(&default_path)?;
         return Ok(file_config.analyze);

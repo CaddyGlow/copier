@@ -4,12 +4,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
 
-/// Helper to get the copier-analyze binary path
+/// Helper to get the quickctx-analyze binary path
 fn get_analyze_binary() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("target");
     path.push("release");
-    path.push("copier-analyze");
+    path.push("quickctx-analyze");
     path
 }
 
@@ -63,7 +63,7 @@ fn test_cache_enables_faster_subsequent_runs() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output1_text = get_output(&output1);
     assert!(
@@ -85,7 +85,7 @@ fn test_cache_enables_faster_subsequent_runs() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output2_text = get_output(&output2);
     assert!(
@@ -118,7 +118,7 @@ fn test_cache_invalidates_on_file_modification() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     assert!(output1.status.success());
 
@@ -139,7 +139,7 @@ fn test_cache_invalidates_on_file_modification() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output2_text = get_output(&output2);
     assert!(
@@ -168,7 +168,7 @@ fn test_no_cache_flag_bypasses_cache() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     assert!(output1.status.success());
 
@@ -181,7 +181,7 @@ fn test_no_cache_flag_bypasses_cache() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output2_text = get_output(&output2);
     // Should not mention cache at all when disabled
@@ -211,12 +211,12 @@ fn test_clear_cache_flag() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     assert!(output1.status.success());
 
     // Check that cache directory exists and has content
-    let cache_path = cache_dir.path().join("copier").join("analyze");
+    let cache_path = cache_dir.path().join("quickctx").join("analyze");
     assert!(cache_path.exists(), "Cache directory should exist");
 
     // Run with --clear-cache
@@ -228,7 +228,7 @@ fn test_clear_cache_flag() {
         .arg(&test_file)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output2_text = get_output(&output2);
     assert!(
@@ -264,7 +264,7 @@ fn test_cache_works_with_multiple_files() {
         .arg(&file3)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     assert!(output1.status.success());
 
@@ -282,7 +282,7 @@ fn test_cache_works_with_multiple_files() {
         .arg(&file3)
         .env("XDG_CACHE_HOME", cache_dir.path().to_str().unwrap())
         .output()
-        .expect("Failed to execute copier-analyze");
+        .expect("Failed to execute quickctx-analyze");
 
     let output2_text = get_output(&output2);
 

@@ -9,7 +9,7 @@ use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use tracing::{info, warn};
 
 use crate::config::{AppContext, ConflictStrategy, ExtractConfig, InputSource};
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use crate::utils;
 
 pub fn run(_context: &AppContext, config: ExtractConfig) -> Result<()> {
@@ -33,7 +33,7 @@ struct FileBlock {
 fn read_input(source: &InputSource) -> Result<String> {
     match source {
         InputSource::File(path) => fs::read_to_string(path.as_std_path())
-            .map_err(|e| CopierError::Io(io::Error::new(e.kind(), format!("{}: {}", path, e)))),
+            .map_err(|e| QuickctxError::Io(io::Error::new(e.kind(), format!("{}: {}", path, e)))),
         InputSource::Stdin => {
             let mut buf = String::new();
             io::stdin().read_to_string(&mut buf)?;
@@ -296,7 +296,7 @@ impl BlockState {
         } else if let Some(hint) = self.path_hint.take() {
             hint
         } else {
-            return Err(CopierError::Markdown(
+            return Err(QuickctxError::Markdown(
                 "unable to determine file path".into(),
             ));
         };

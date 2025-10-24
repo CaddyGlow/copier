@@ -3,11 +3,11 @@ use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::error::CopierError;
+use crate::error::QuickctxError;
 
 static TELEMETRY: OnceLock<()> = OnceLock::new();
 
-pub fn init(verbosity: u8) -> Result<(), CopierError> {
+pub fn init(verbosity: u8) -> Result<(), QuickctxError> {
     // Check if already initialized
     if TELEMETRY.get().is_some() {
         return Ok(());
@@ -22,7 +22,7 @@ pub fn init(verbosity: u8) -> Result<(), CopierError> {
         .with_env_filter(env_filter)
         .with_target(false)
         .try_init()
-        .map_err(|err| CopierError::TelemetryInit(err.to_string()))?;
+        .map_err(|err| QuickctxError::TelemetryInit(err.to_string()))?;
 
     // Set the flag - if another thread beat us to it, that's fine
     let _ = TELEMETRY.set(());

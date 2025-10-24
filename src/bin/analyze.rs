@@ -1,11 +1,11 @@
 use clap::Parser;
-use copier::analyze::{
+use quickctx::analyze::{
     LspClient, LspServerConfig, OutputFormat, ProjectType, RelativePath, SymbolCache, SymbolIndex,
     SymbolInfo, TypeExtractor, TypeResolver, detect_project_root, extract_project_name,
     extract_symbols, get_formatter, get_lsp_server_with_config, has_lsp_support,
 };
-use copier::config::{AnalyzeSection, load_analyze_config};
-use copier::error::Result;
+use quickctx::config::{AnalyzeSection, load_analyze_config};
+use quickctx::error::Result;
 use ignore::WalkBuilder;
 use std::collections::HashMap;
 use std::fs;
@@ -24,7 +24,7 @@ struct ProjectContext {
 #[allow(dead_code)]
 struct ProcessingContext<'a> {
     config: &'a AnalyzeSection,
-    progress: &'a copier::analyze::progress::ProgressDisplay,
+    progress: &'a quickctx::analyze::progress::ProgressDisplay,
     args: &'a Args,
     cache: Option<&'a SymbolCache>,
 }
@@ -37,7 +37,7 @@ fn parse_symbol_filter(filter_arg: &str) -> Result<Vec<String>> {
 
     let names: Vec<String> = if filter_path.exists() && filter_path.is_file() {
         // Read from file - parse lines like "symbol_name (kind) - file:line"
-        let content = fs::read_to_string(&filter_path).map_err(copier::error::CopierError::Io)?;
+        let content = fs::read_to_string(&filter_path).map_err(quickctx::error::QuickctxError::Io)?;
 
         content
             .lines()
@@ -128,7 +128,7 @@ fn populate_type_dependencies(
 fn collect_external_types(
     symbols: &[SymbolInfo],
 ) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
-    use copier::analyze::type_resolver::TypeResolution;
+    use quickctx::analyze::type_resolver::TypeResolution;
     use std::collections::{HashMap, HashSet};
 
     let mut external_files: HashMap<String, HashSet<String>> = HashMap::new();
@@ -170,7 +170,7 @@ fn collect_external_types(
 fn fetch_external_symbols(
     external_files: &std::collections::HashMap<String, std::collections::HashSet<String>>,
     client: &mut LspClient,
-    progress: Option<&copier::analyze::progress::ProgressDisplay>,
+    progress: Option<&quickctx::analyze::progress::ProgressDisplay>,
     cache: Option<&SymbolCache>,
 ) -> Result<Vec<SymbolInfo>> {
     let mut external_symbols = Vec::new();
@@ -346,7 +346,7 @@ fn group_files_by_project(
 fn with_lsp_client<F, R>(
     project: &ProjectContext,
     config: &AnalyzeSection,
-    progress: &copier::analyze::progress::ProgressDisplay,
+    progress: &quickctx::analyze::progress::ProgressDisplay,
     timeout: u64,
     f: F,
 ) -> Result<R>
@@ -381,7 +381,7 @@ where
 /// Write output to file or stdout
 fn write_output(content: &str, output_path: Option<&std::path::Path>) -> Result<()> {
     if let Some(path) = output_path {
-        fs::write(path, content).map_err(copier::error::CopierError::Io)?;
+        fs::write(path, content).map_err(quickctx::error::QuickctxError::Io)?;
         println!("Analysis written to: {}", path.display());
     } else {
         print!("{}", content);
@@ -429,7 +429,7 @@ impl ProcessingMode for SymbolMode {
 
             let input_path = input
                 .canonicalize()
-                .map_err(copier::error::CopierError::Io)?;
+                .map_err(quickctx::error::QuickctxError::Io)?;
 
             // Try to get symbols from cache first
             let symbols = if let Some(cache) = ctx.cache {
@@ -441,11 +441,11 @@ impl ProcessingMode for SymbolMode {
                     None => {
                         // Cache miss - extract via LSP
                         let content = fs::read_to_string(&input_path)
-                            .map_err(copier::error::CopierError::Io)?;
+                            .map_err(quickctx::error::QuickctxError::Io)?;
 
                         let file_uri =
                             lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                                copier::error::CopierError::Io(std::io::Error::new(
+                                quickctx::error::QuickctxError::Io(std::io::Error::new(
                                     std::io::ErrorKind::InvalidInput,
                                     "Invalid file path",
                                 ))
@@ -472,10 +472,10 @@ impl ProcessingMode for SymbolMode {
             } else {
                 // Cache disabled - extract via LSP
                 let content =
-                    fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
+                    fs::read_to_string(&input_path).map_err(quickctx::error::QuickctxError::Io)?;
 
                 let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                    copier::error::CopierError::Io(std::io::Error::new(
+                    quickctx::error::QuickctxError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         "Invalid file path",
                     ))
@@ -514,7 +514,7 @@ impl ProcessingMode for SymbolMode {
         for (input_path, symbols) in &all_file_symbols {
             pb2.set_message(format!("Resolving types\n{}", input_path.display()));
             let file_uri = lsp_types::Url::from_file_path(input_path).map_err(|_| {
-                copier::error::CopierError::Io(std::io::Error::new(
+                quickctx::error::QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Invalid file path for URI conversion",
                 ))
@@ -625,8 +625,8 @@ struct DiagnosticsMode {
 }
 
 impl ProcessingMode for DiagnosticsMode {
-    type FileOutput = copier::analyze::FileDiagnostics;
-    type ProjectOutput = copier::analyze::ProjectDiagnostics;
+    type FileOutput = quickctx::analyze::FileDiagnostics;
+    type ProjectOutput = quickctx::analyze::ProjectDiagnostics;
 
     fn process_files(
         &self,
@@ -643,9 +643,9 @@ impl ProcessingMode for DiagnosticsMode {
             pb.set_message(format!("Opening files\n{}", input.display()));
             let input_path = input
                 .canonicalize()
-                .map_err(copier::error::CopierError::Io)?;
+                .map_err(quickctx::error::QuickctxError::Io)?;
             let content =
-                fs::read_to_string(&input_path).map_err(copier::error::CopierError::Io)?;
+                fs::read_to_string(&input_path).map_err(quickctx::error::QuickctxError::Io)?;
 
             tracing::info!("Opening document: {}", input.display());
             client.did_open(&input_path, &content)?;
@@ -664,10 +664,10 @@ impl ProcessingMode for DiagnosticsMode {
         for input in files {
             let input_path = input
                 .canonicalize()
-                .map_err(copier::error::CopierError::Io)?;
+                .map_err(quickctx::error::QuickctxError::Io)?;
 
             let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                copier::error::CopierError::Io(std::io::Error::new(
+                quickctx::error::QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Invalid file path",
                 ))
@@ -687,13 +687,13 @@ impl ProcessingMode for DiagnosticsMode {
                 .display()
                 .to_string();
 
-            file_diagnostics.push(copier::analyze::FileDiagnostics {
+            file_diagnostics.push(quickctx::analyze::FileDiagnostics {
                 file_path: RelativePath::from_string(relative_path),
                 diagnostics,
             });
         }
 
-        Ok(copier::analyze::ProjectDiagnostics {
+        Ok(quickctx::analyze::ProjectDiagnostics {
             project_name: project.project_name.clone(),
             project_type: project.project_type,
             files: file_diagnostics,
@@ -708,7 +708,7 @@ impl ProcessingMode for DiagnosticsMode {
 
 #[derive(Parser, Debug, Clone)]
 #[command(
-    name = "copier-analyze",
+    name = "quickctx-analyze",
     author,
     version,
     about = "Analyze source code using LSP to extract symbols, documentation, and types"
@@ -726,7 +726,7 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    /// Path to configuration file (defaults to copier.toml if present)
+    /// Path to configuration file (defaults to quickctx.toml if present)
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
 
@@ -822,7 +822,7 @@ fn main() -> ExitCode {
 
 fn run(args: Args) -> Result<()> {
     // Create progress display based on verbosity
-    let progress = copier::analyze::progress::ProgressDisplay::new(args.verbose);
+    let progress = quickctx::analyze::progress::ProgressDisplay::new(args.verbose);
 
     // Load configuration to get cache settings
     let config = load_analyze_config(args.config.as_deref())?;
@@ -844,7 +844,7 @@ fn run(args: Args) -> Result<()> {
     // Validate all input paths exist
     for input in &args.inputs {
         if !input.exists() {
-            return Err(copier::error::CopierError::Io(std::io::Error::new(
+            return Err(quickctx::error::QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("Input path not found: {}", input.display()),
             )));
@@ -861,7 +861,7 @@ fn run(args: Args) -> Result<()> {
     )?;
 
     if expanded_files.is_empty() {
-        return Err(copier::error::CopierError::InvalidArgument(
+        return Err(quickctx::error::QuickctxError::InvalidArgument(
             "No valid source files found with LSP support".to_string(),
         ));
     }
@@ -888,7 +888,7 @@ fn expand_inputs(
     inputs: &[PathBuf],
     respect_gitignore: bool,
     include_hidden: bool,
-    progress: Option<&copier::analyze::progress::ProgressDisplay>,
+    progress: Option<&quickctx::analyze::progress::ProgressDisplay>,
 ) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
@@ -917,7 +917,7 @@ fn walk_directory(
     respect_gitignore: bool,
     include_hidden: bool,
     files: &mut Vec<PathBuf>,
-    progress: Option<&copier::analyze::progress::ProgressDisplay>,
+    progress: Option<&quickctx::analyze::progress::ProgressDisplay>,
 ) -> Result<()> {
     let spinner = progress.map(|p| p.spinner(format!("[1/4] Finding source files")));
 
@@ -982,7 +982,7 @@ fn walk_directory(
 fn process_with_mode<M: ProcessingMode>(
     args: &Args,
     mode: M,
-    progress: &copier::analyze::progress::ProgressDisplay,
+    progress: &quickctx::analyze::progress::ProgressDisplay,
     cache: Option<&SymbolCache>,
 ) -> Result<()> {
     let config = load_analyze_config(args.config.as_deref())?;

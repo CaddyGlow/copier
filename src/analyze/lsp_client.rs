@@ -1,7 +1,7 @@
 use crate::analyze::jsonrpc::JsonRpcTransport;
 use crate::analyze::lsp_config::get_language_id;
 use crate::analyze::project_root::ProjectType;
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use lsp_types::*;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -61,7 +61,7 @@ impl LspClient {
         }
 
         let mut child = command.spawn().map_err(|e| {
-            CopierError::Io(std::io::Error::other(format!(
+            QuickctxError::Io(std::io::Error::other(format!(
                 "Failed to spawn LSP server '{}': {}",
                 server_cmd, e
             )))
@@ -70,17 +70,17 @@ impl LspClient {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| CopierError::Io(std::io::Error::other("Failed to capture stdin")))?;
+            .ok_or_else(|| QuickctxError::Io(std::io::Error::other("Failed to capture stdin")))?;
 
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| CopierError::Io(std::io::Error::other("Failed to capture stdout")))?;
+            .ok_or_else(|| QuickctxError::Io(std::io::Error::other("Failed to capture stdout")))?;
 
         let transport = JsonRpcTransport::new(stdin, stdout);
 
         let root_uri = Url::from_file_path(root_path).map_err(|_| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Invalid root path",
             ))
@@ -126,7 +126,7 @@ impl LspClient {
         };
 
         let params_value = serde_json::to_value(params).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize initialize params: {}", e),
             ))
@@ -136,7 +136,7 @@ impl LspClient {
         let response = self.transport.read_response(id)?;
 
         if let Some(error) = response.error {
-            return Err(CopierError::Io(std::io::Error::other(format!(
+            return Err(QuickctxError::Io(std::io::Error::other(format!(
                 "Initialize error: {}",
                 error.message
             ))));
@@ -144,13 +144,13 @@ impl LspClient {
 
         let result: InitializeResult =
             serde_json::from_value(response.result.ok_or_else(|| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "Missing initialize result",
                 ))
             })?)
             .map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to parse initialize result: {}", e),
                 ))
@@ -169,13 +169,13 @@ impl LspClient {
     /// Open a document in the LSP server
     pub fn did_open(&mut self, file_path: &Path, content: &str) -> Result<()> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::other(
+            return Err(QuickctxError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
 
         let uri = Url::from_file_path(file_path).map_err(|_| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Invalid file path",
             ))
@@ -191,7 +191,7 @@ impl LspClient {
         };
 
         let params_value = serde_json::to_value(params).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize didOpen params: {}", e),
             ))
@@ -220,7 +220,7 @@ impl LspClient {
             };
 
             let params_value = serde_json::to_value(params).map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to serialize documentSymbol params: {}", e),
                 ))
@@ -244,7 +244,7 @@ impl LspClient {
             );
 
             if let Some(error) = response.error {
-                return Err(CopierError::Io(std::io::Error::other(format!(
+                return Err(QuickctxError::Io(std::io::Error::other(format!(
                     "documentSymbol error: {}",
                     error.message
                 ))));
@@ -274,7 +274,7 @@ impl LspClient {
                 // Try to parse the result
                 let result: DocumentSymbolResponse =
                     serde_json::from_value(result_value).map_err(|e| {
-                        CopierError::Io(std::io::Error::new(
+                        QuickctxError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!("Failed to parse documentSymbol result: {}", e),
                         ))
@@ -291,7 +291,7 @@ impl LspClient {
                     std::thread::sleep(retry_delay);
                     continue;
                 } else {
-                    return Err(CopierError::Io(std::io::Error::new(
+                    return Err(QuickctxError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!(
                             "Missing documentSymbol result after {} retries",
@@ -317,7 +317,7 @@ impl LspClient {
         };
 
         let params_value = serde_json::to_value(params).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize hover params: {}", e),
             ))
@@ -339,7 +339,7 @@ impl LspClient {
             }
 
             let hover: Hover = serde_json::from_value(result).map_err(|e| {
-                CopierError::Io(std::io::Error::new(
+                QuickctxError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to parse hover result: {}", e),
                 ))
@@ -354,7 +354,7 @@ impl LspClient {
     /// Search for symbols across the workspace by name
     pub fn workspace_symbol(&mut self, query: &str) -> Result<Vec<SymbolInformation>> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::other(
+            return Err(QuickctxError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
@@ -366,7 +366,7 @@ impl LspClient {
         };
 
         let params_value = serde_json::to_value(params).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize workspace/symbol params: {}", e),
             ))
@@ -415,7 +415,7 @@ impl LspClient {
         position: Position,
     ) -> Result<Option<GotoDefinitionResponse>> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::other(
+            return Err(QuickctxError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }
@@ -430,7 +430,7 @@ impl LspClient {
         };
 
         let params_value = serde_json::to_value(params).map_err(|e| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize typeDefinition params: {}", e),
             ))
@@ -454,7 +454,7 @@ impl LspClient {
             // The response can be Location | Location[] | LocationLink[]
             let goto_response: GotoDefinitionResponse =
                 serde_json::from_value(result).map_err(|e| {
-                    CopierError::Io(std::io::Error::new(
+                    QuickctxError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Failed to parse typeDefinition result: {}", e),
                     ))
@@ -643,7 +643,7 @@ impl LspClient {
         progress_mgr: Option<&crate::analyze::progress::LspProgressManager>,
     ) -> Result<()> {
         if !self.initialized {
-            return Err(CopierError::Io(std::io::Error::other(
+            return Err(QuickctxError::Io(std::io::Error::other(
                 "LSP client not initialized",
             )));
         }

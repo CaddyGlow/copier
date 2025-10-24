@@ -3,7 +3,7 @@ use glob::glob;
 use tracing::warn;
 
 use crate::config::AppContext;
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use crate::utils;
 
 /// Expands a single input string (which may be a path or glob pattern) into
@@ -33,7 +33,7 @@ fn expand_glob_pattern(context: &AppContext, pattern: &str) -> Result<Vec<Utf8Pa
     let pattern = normalize_glob_pattern(context, pattern);
 
     let mut paths = Vec::new();
-    let walker = glob(&pattern).map_err(|err| CopierError::InvalidArgument(err.to_string()))?;
+    let walker = glob(&pattern).map_err(|err| QuickctxError::InvalidArgument(err.to_string()))?;
 
     for entry in walker {
         match entry {

@@ -1,6 +1,6 @@
-use copier::aggregate::FileEntry;
-use copier::config::{AggregateConfig, FencePreference, OutputFormat};
-use copier::render;
+use quickctx::aggregate::FileEntry;
+use quickctx::config::{AggregateConfig, FencePreference, OutputFormat};
+use quickctx::render;
 
 fn make_entry(relative: &str, contents: &str, language: Option<&str>) -> FileEntry {
     FileEntry {

@@ -1,5 +1,5 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use copier::utils::{is_probably_binary, language_for_path, looks_like_glob, relative_to};
+use quickctx::utils::{is_probably_binary, language_for_path, looks_like_glob, relative_to};
 
 #[test]
 fn test_language_for_path_by_extension() {

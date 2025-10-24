@@ -1,4 +1,4 @@
-use crate::error::{CopierError, Result};
+use crate::error::{QuickctxError, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -15,11 +15,11 @@ pub enum ProjectType {
 /// Detect the project root by walking up the directory tree looking for marker files
 pub fn detect_project_root(file_path: &Path) -> Result<(PathBuf, ProjectType)> {
     // Canonicalize the path to get absolute path
-    let canonical_path = file_path.canonicalize().map_err(CopierError::Io)?;
+    let canonical_path = file_path.canonicalize().map_err(QuickctxError::Io)?;
 
     let start_dir = if canonical_path.is_file() {
         canonical_path.parent().ok_or_else(|| {
-            CopierError::Io(std::io::Error::new(
+            QuickctxError::Io(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Cannot determine parent directory",
             ))

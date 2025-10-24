@@ -79,7 +79,7 @@ function Select-ReleaseAsset {
 }
 
 function New-TemporaryDirectory {
-  $path = Join-Path ([System.IO.Path]::GetTempPath()) ("copier-" + [Guid]::NewGuid().ToString("N"))
+  $path = Join-Path ([System.IO.Path]::GetTempPath()) ("quickctx-" + [Guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $path | Out-Null
   return $path
 }
@@ -89,11 +89,11 @@ function Ensure-PathContainsDestination {
 
   $pathEntries = ($env:PATH -split ';') | Where-Object { $_ }
   if ($pathEntries -notcontains $Destination) {
-    Write-Warning "Add '$Destination' to your PATH to use copier from any shell."
+    Write-Warning "Add '$Destination' to your PATH to use quickctx from any shell."
   }
 }
 
-function Install-copierBinary {
+function Install-quickctxBinary {
   param(
     [string]$Destination,
     [hashtable]$Headers,
@@ -107,19 +107,19 @@ function Install-copierBinary {
 
     Expand-Archive -Path $archivePath -DestinationPath $tempDir -Force -ErrorAction Stop
 
-    $binaryPath = Join-Path $tempDir "copier.exe"
+    $binaryPath = Join-Path $tempDir "quickctx.exe"
     if (-not (Test-Path -LiteralPath $binaryPath)) {
-      throw "The downloaded archive did not contain copier.exe."
+      throw "The downloaded archive did not contain quickctx.exe."
     }
 
     if (-not (Test-Path -LiteralPath $Destination)) {
       New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     }
 
-    $installPath = Join-Path $Destination "copier.exe"
+    $installPath = Join-Path $Destination "quickctx.exe"
     Move-Item -LiteralPath $binaryPath -Destination $installPath -Force
 
-    Write-Host "Installed copier to $installPath"
+    Write-Host "Installed quickctx to $installPath"
     Ensure-PathContainsDestination -Destination $Destination
   }
   finally {
@@ -133,7 +133,7 @@ Ensure-WindowsPlatform
 Ensure-SupportedArchitecture
 
 $owner = "CaddyGlow"
-$repo = "copier"
+$repo = "quickctx"
 $target = "x86_64-pc-windows-gnu"
 $apiUrl = "https://api.github.com/repos/$owner/$repo"
 
@@ -144,4 +144,4 @@ $releaseUrl = if ($Tag) { "$apiUrl/releases/tags/$Tag" } else { "$apiUrl/release
 $release = Get-GitHubRelease -Url $releaseUrl -Headers $headers
 $asset = Select-ReleaseAsset -Release $release -Target $target
 
-Install-copierBinary -Destination $Destination -Headers $headers -Asset $asset
+Install-quickctxBinary -Destination $Destination -Headers $headers -Asset $asset

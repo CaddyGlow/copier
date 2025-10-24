@@ -3,8 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use copier::cli::{AggregateArgs, Cli, Commands, ExtractArgs};
-use copier::config::{
+use quickctx::cli::{AggregateArgs, Cli, Commands, ExtractArgs};
+use quickctx::config::{
     self, AggregateConfig, ConflictStrategy, FencePreference, ModeConfig, OutputFormat,
 };
 
@@ -20,7 +20,7 @@ impl TempDir {
         let mut base = env::temp_dir();
         let pid = std::process::id();
         for attempt in 0..1000 {
-            base.push(format!("copier-config-test-{}-{}", pid, attempt));
+            base.push(format!("quickctx-config-test-{}-{}", pid, attempt));
             if fs::create_dir(&base).is_ok() {
                 return Self { path: base };
             }
@@ -252,7 +252,7 @@ fn test_load_config_with_toml_file() {
     let original_dir = env::current_dir().unwrap();
     env::set_current_dir(temp.path()).unwrap();
 
-    // Create a copier.toml config file
+    // Create a quickctx.toml config file
     let config_content = r#"
 [general]
 verbose = 1
@@ -268,7 +268,7 @@ exclude = ["*.tmp"]
 conflict = "overwrite"
 "#;
 
-    fs::write(temp.path().join("copier.toml"), config_content).unwrap();
+    fs::write(temp.path().join("quickctx.toml"), config_content).unwrap();
 
     let cli = Cli {
         config: None,
@@ -307,14 +307,14 @@ fn test_load_config_cli_overrides_file() {
     let original_dir = env::current_dir().unwrap();
     env::set_current_dir(temp.path()).unwrap();
 
-    // Create a copier.toml config file
+    // Create a quickctx.toml config file
     let config_content = r#"
 [aggregate]
 paths = ["from-file/"]
 format = "simple"
 "#;
 
-    fs::write(temp.path().join("copier.toml"), config_content).unwrap();
+    fs::write(temp.path().join("quickctx.toml"), config_content).unwrap();
 
     let cli = Cli {
         config: None,
@@ -396,7 +396,7 @@ fn test_load_config_invalid_toml() {
     env::set_current_dir(temp.path()).unwrap();
 
     let invalid_config = "this is not valid TOML ][[[";
-    let config_path = temp.path().join("copier.toml");
+    let config_path = temp.path().join("quickctx.toml");
     fs::write(&config_path, invalid_config).unwrap();
 
     let cli = Cli {
@@ -512,7 +512,7 @@ fn test_verbosity_cli_plus_file() {
 verbose = 2
 "#;
 
-    fs::write(temp.path().join("copier.toml"), config_content).unwrap();
+    fs::write(temp.path().join("quickctx.toml"), config_content).unwrap();
 
     let cli = Cli {
         config: None,
