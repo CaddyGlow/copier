@@ -517,6 +517,7 @@ impl LspClient {
         &mut self,
         timeout_ms: u64,
         expected_file_count: Option<usize>,
+        progress_display: Option<&crate::analyze::progress::ProgressDisplay>,
     ) -> Result<std::collections::HashMap<Url, Vec<lsp_types::Diagnostic>>> {
         if let Some(count) = expected_file_count {
             tracing::info!(
@@ -532,6 +533,15 @@ impl LspClient {
         let timeout = std::time::Duration::from_millis(timeout_ms);
         let poll_interval = std::time::Duration::from_millis(100); // Check every 100ms
 
+        // Create progress bar if we have expected count and progress display
+        let progress_bar = if let (Some(count), Some(display)) = (expected_file_count, progress_display) {
+            let pb = display.progress_bar(count as u64, "[3/3]");
+            pb.set_message("Collecting diagnostics");
+            Some(pb)
+        } else {
+            None
+        };
+
         // Keep track of whether we've seen any diagnostics
         let mut last_diag_count = 0;
         let mut stable_count = 0;
@@ -543,6 +553,11 @@ impl LspClient {
 
             // Check if any diagnostics have arrived
             let current_diag_count = self.transport.diagnostics_count();
+
+            // Update progress bar
+            if let Some(ref pb) = progress_bar {
+                pb.set_position(current_diag_count as u64);
+            }
 
             tracing::debug!("Current diagnostic file count: {}", current_diag_count);
 
@@ -584,6 +599,12 @@ impl LspClient {
             last_diag_count = current_diag_count;
         }
 
+        // Finish progress bar
+        if let Some(pb) = progress_bar {
+            pb.finish_and_clear();
+            eprintln!("[3/3] ✓ Collecting diagnostics");
+        }
+
         // Take all diagnostics that arrived
         let diagnostics_by_uri = self.transport.take_diagnostics();
 
@@ -615,7 +636,11 @@ impl LspClient {
 
     /// Wait for LSP server to complete initial indexing
     /// This polls for progress notifications and waits until they're all complete
-    pub fn wait_for_indexing(&mut self, timeout_secs: u64) -> Result<()> {
+    pub fn wait_for_indexing(
+        &mut self,
+        timeout_secs: u64,
+        progress_mgr: Option<&crate::analyze::progress::LspProgressManager>,
+    ) -> Result<()> {
         if !self.initialized {
             return Err(CopierError::Io(std::io::Error::other(
                 "LSP client not initialized",
@@ -629,15 +654,22 @@ impl LspClient {
 
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        let poll_interval = std::time::Duration::from_millis(200);
+        let poll_interval = std::time::Duration::from_millis(50); // Faster polling to catch quick progress items
 
-        let mut last_progress_report = std::time::Instant::now();
-        let report_interval = std::time::Duration::from_secs(1);
+        // Do an initial update before entering the loop to catch progress items
+        // that start and finish quickly
+        if let Some(mgr) = progress_mgr {
+            let progress_states = self.transport.get_progress();
+            mgr.update(&progress_states);
+        }
 
         loop {
             // Check if we've exceeded the timeout
             if start.elapsed() >= timeout {
                 tracing::warn!("LSP indexing wait timeout exceeded ({}s)", timeout_secs);
+                if let Some(mgr) = progress_mgr {
+                    mgr.clear();
+                }
                 break;
             }
 
@@ -647,46 +679,18 @@ impl LspClient {
             // Check current progress state
             let has_active = self.transport.has_active_progress();
 
-            // Log progress updates periodically
-            if last_progress_report.elapsed() >= report_interval {
+            // Update progress display with current states
+            if let Some(mgr) = progress_mgr {
                 let progress_states = self.transport.get_progress();
-                if !progress_states.is_empty() {
-                    for (_token, state) in progress_states.iter() {
-                        match state {
-                            crate::analyze::jsonrpc::ProgressState::Begin { title, message } => {
-                                tracing::info!(
-                                    "  Progress: {} - {}",
-                                    title,
-                                    message.as_deref().unwrap_or("")
-                                );
-                            }
-                            crate::analyze::jsonrpc::ProgressState::Report {
-                                message,
-                                percentage,
-                            } => {
-                                if let Some(pct) = percentage {
-                                    tracing::info!(
-                                        "  Progress: {}%{}",
-                                        pct,
-                                        message
-                                            .as_ref()
-                                            .map(|m| format!(" - {}", m))
-                                            .unwrap_or_default()
-                                    );
-                                }
-                            }
-                            crate::analyze::jsonrpc::ProgressState::End { message } => {
-                                tracing::info!("  Completed: {}", message.as_deref().unwrap_or(""));
-                            }
-                        }
-                    }
-                }
-                last_progress_report = std::time::Instant::now();
+                mgr.update(&progress_states);
             }
 
             // If no active progress and we've waited a reasonable amount of time, we're done
             if !has_active && start.elapsed() > std::time::Duration::from_millis(500) {
                 tracing::info!("LSP indexing appears complete");
+                if let Some(mgr) = progress_mgr {
+                    mgr.clear();
+                }
                 break;
             }
         }

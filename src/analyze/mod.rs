@@ -4,6 +4,7 @@ pub mod jsonrpc;
 pub mod lsp_client;
 pub mod lsp_config;
 pub mod path_types;
+pub mod progress;
 pub mod project_root;
 pub mod symbol_index;
 pub mod type_extractor;
