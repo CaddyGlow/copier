@@ -8,7 +8,12 @@ use tempfile::TempDir;
 fn get_analyze_binary() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("target");
-    path.push("release");
+    // Use the same profile as the test binary (debug or release)
+    if cfg!(debug_assertions) {
+        path.push("debug");
+    } else {
+        path.push("release");
+    }
     path.push("quickctx-analyze");
     path
 }
