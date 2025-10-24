@@ -568,6 +568,7 @@ enum CliOutputFormat {
     Markdown,
     Json,
     Csv,
+    Compact,
 }
 
 impl From<CliOutputFormat> for OutputFormat {
@@ -576,6 +577,7 @@ impl From<CliOutputFormat> for OutputFormat {
             CliOutputFormat::Markdown => OutputFormat::Markdown,
             CliOutputFormat::Json => OutputFormat::Json,
             CliOutputFormat::Csv => OutputFormat::Csv,
+            CliOutputFormat::Compact => OutputFormat::Compact,
         }
     }
 }

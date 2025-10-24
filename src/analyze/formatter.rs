@@ -16,6 +16,7 @@ pub enum OutputFormat {
     Markdown,
     Json,
     Csv,
+    Compact,
 }
 
 /// Diagnostics for a single file
@@ -59,6 +60,7 @@ pub trait Formatter {
 pub struct MarkdownFormatter;
 pub struct JsonFormatter;
 pub struct CsvFormatter;
+pub struct CompactFormatter;
 
 impl Formatter for MarkdownFormatter {
     fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
@@ -1062,11 +1064,185 @@ fn csv_escape(s: &str) -> String {
     }
 }
 
+impl Formatter for CompactFormatter {
+    fn format(&self, symbols: &[SymbolInfo], file_path: &str) -> String {
+        let mut output = String::new();
+
+        // File header with line count (we'll use range end as approximation)
+        let max_line = symbols.iter()
+            .map(|s| s.range.end.line)
+            .max()
+            .unwrap_or(0) + 1;
+        output.push_str(&format!("{} ({} lines)\n", file_path, max_line));
+
+        // Format symbols as tree
+        for (idx, symbol) in symbols.iter().enumerate() {
+            let is_last = idx == symbols.len() - 1;
+            format_symbol_tree(&mut output, symbol, "", is_last);
+        }
+
+        output
+    }
+
+    fn format_multiple(&self, files: &[(String, Vec<SymbolInfo>)]) -> String {
+        let mut output = String::new();
+
+        for (file_path, symbols) in files {
+            output.push_str(&self.format(symbols, file_path));
+            output.push('\n');
+        }
+
+        output
+    }
+
+    fn format_by_projects(&self, projects: &[(String, ProjectType, Vec<(String, Vec<SymbolInfo>)>)]) -> String {
+        let mut output = String::new();
+
+        for (project_name, project_type, files) in projects {
+            output.push_str(&format!("# Project: {} ({:?})\n\n", project_name, project_type));
+
+            for (file_path, symbols) in files {
+                output.push_str(&self.format(symbols, file_path));
+                output.push('\n');
+            }
+        }
+
+        output
+    }
+
+    fn format_diagnostics(&self, projects: &[ProjectDiagnostics]) -> String {
+        let mut output = String::new();
+
+        for project in projects {
+            output.push_str(&format!("# Project: {} ({:?})\n\n", project.project_name, project.project_type));
+
+            for file in &project.files {
+                output.push_str(&format!("{}\n", file.file_path));
+
+                for diag in &file.diagnostics {
+                    let severity = match diag.severity {
+                        Some(lsp_types::DiagnosticSeverity::ERROR) => "E",
+                        Some(lsp_types::DiagnosticSeverity::WARNING) => "W",
+                        Some(lsp_types::DiagnosticSeverity::INFORMATION) => "I",
+                        Some(lsp_types::DiagnosticSeverity::HINT) => "H",
+                        _ => "?",
+                    };
+
+                    output.push_str(&format!(
+                        "  [{}] :{}:{} {}\n",
+                        severity,
+                        diag.range.start.line + 1,
+                        diag.range.start.character + 1,
+                        diag.message
+                    ));
+                }
+                output.push('\n');
+            }
+        }
+
+        output
+    }
+
+    fn format_type_dependencies(&self, projects: &[ProjectTypeDependencies]) -> String {
+        let mut output = String::new();
+
+        for project in projects {
+            output.push_str(&format!("# Project: {} ({:?})\n\n", project.project_name, project.project_type));
+
+            for file in &project.files {
+                output.push_str(&format!("{}\n", file.file_path));
+
+                for typ in &file.types {
+                    let location = match &typ.resolution {
+                        TypeResolution::Local { file_path, line, .. } => {
+                            format!("→ {}:{}", file_path, line)
+                        }
+                        TypeResolution::External { file_path: Some(p), line: Some(l) } => {
+                            format!("→ ext:{}:{}", p, l)
+                        }
+                        TypeResolution::External { .. } => "→ ext".to_string(),
+                        TypeResolution::Unresolved => "→ ?".to_string(),
+                    };
+
+                    output.push_str(&format!("  {} {}\n", typ.type_name, location));
+                }
+                output.push('\n');
+            }
+        }
+
+        output
+    }
+}
+
+/// Format a symbol and its children in tree format
+fn format_symbol_tree(output: &mut String, symbol: &SymbolInfo, prefix: &str, is_last: bool) {
+    // Tree characters
+    let branch = if is_last { "└─ " } else { "├─ " };
+    let extension = if is_last { "   " } else { "│  " };
+
+    // Format the symbol line: ├─ visibility name signature :line
+    let visibility = match symbol.kind {
+        SymbolKind::MODULE | SymbolKind::FUNCTION | SymbolKind::STRUCT |
+        SymbolKind::ENUM | SymbolKind::INTERFACE | SymbolKind::CLASS => "pub ",
+        _ => "",
+    };
+
+    let kind_prefix = match symbol.kind {
+        SymbolKind::MODULE => "mod ",
+        SymbolKind::FUNCTION | SymbolKind::METHOD => "fn ",
+        SymbolKind::STRUCT => "struct ",
+        SymbolKind::ENUM => "enum ",
+        SymbolKind::INTERFACE => "trait ",
+        SymbolKind::CLASS => "class ",
+        SymbolKind::CONSTANT => "const ",
+        SymbolKind::VARIABLE => "let ",
+        _ => "",
+    };
+
+    // Build signature from detail or name
+    let signature = if let Some(detail) = &symbol.detail {
+        // Extract just the signature part (remove leading keywords that we'll add)
+        let clean_detail = detail
+            .trim_start_matches("pub ")
+            .trim_start_matches("fn ")
+            .trim_start_matches("struct ")
+            .trim_start_matches("enum ")
+            .trim_start_matches("trait ")
+            .trim_start_matches("class ")
+            .trim_start_matches("const ")
+            .trim_start_matches("let ");
+
+        format!("{}{}", symbol.name,
+            if clean_detail.starts_with(&symbol.name) {
+                &clean_detail[symbol.name.len()..]
+            } else {
+                ""
+            })
+    } else {
+        symbol.name.clone()
+    };
+
+    let line_num = symbol.selection_range.start.line + 1;
+    output.push_str(&format!("{}{}{}{}{} :{}\n",
+        prefix, branch, visibility, kind_prefix, signature, line_num));
+
+    // Format children with indentation
+    if !symbol.children.is_empty() {
+        let child_prefix = format!("{}{}", prefix, extension);
+
+        for (idx, child) in symbol.children.iter().enumerate() {
+            let is_last_child = idx == symbol.children.len() - 1;
+            format_symbol_tree(output, child, &child_prefix, is_last_child);
+        }
+    }
+}
+
 pub fn get_formatter(format: OutputFormat) -> Box<dyn Formatter> {
     match format {
         OutputFormat::Markdown => Box::new(MarkdownFormatter),
         OutputFormat::Json => Box::new(JsonFormatter),
         OutputFormat::Csv => Box::new(CsvFormatter),
+        OutputFormat::Compact => Box::new(CompactFormatter),
     }
 }
 
