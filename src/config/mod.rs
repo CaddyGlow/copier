@@ -19,6 +19,7 @@ pub enum OutputFormat {
     Simple,
     Comment,
     Heading,
+    Heredoc,
 }
 
 #[derive(

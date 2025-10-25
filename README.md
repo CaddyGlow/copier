@@ -1,14 +1,26 @@
 # Quickctx
 
-A bidirectional file content copy-paste tool with LSP-powered code analysis. Convert between files and markdown representations, and extract rich symbol information from source code.
+**Quickly extract file contents and code context to share with LLMs.**
+
+Quickctx is designed for one thing: getting your code into LLM conversations as fast as possible. Point it at files or directories, and instantly get markdown-formatted output ready to copy/paste into ChatGPT, Claude, or any other LLM.
+
+## Why Quickctx?
+
+When working with LLMs on code, you need to:
+- Share multiple files at once without manually copying each one
+- Provide proper context (file paths, language syntax highlighting)
+- Quickly extract symbols and documentation for deeper analysis
+- Get files back out after the LLM generates or modifies them
+
+Quickctx does all of this in a single command.
 
 ## Features
 
 ### Core Features
-- **Copy** multiple files into a single markdown document
-- **Paste** files from markdown back to the filesystem
-- **Analyze** code using Language Server Protocol (LSP) for accurate symbol extraction
-- **Bidirectional** - seamlessly convert back and forth between files and markdown
+- **Copy** multiple files into a single markdown document, ready to paste
+- **Paste** files from markdown back to the filesystem (bidirectional workflow)
+- **Analyze** code using Language Server Protocol (LSP) to extract symbols, types, and documentation
+- **Fast** - optimized for quick context extraction, respects `.gitignore` by default
 
 ### Copy & Paste
 - **Multiple output formats** (simple, comment-style, heading-style)

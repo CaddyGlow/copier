@@ -20,15 +20,74 @@ pub fn render_entries(entries: &[FileEntry], config: &CopyConfig) -> Result<Stri
 }
 
 fn render_entry(entry: &FileEntry, config: &CopyConfig, buffer: &mut String) -> Result<()> {
-    // Strategy pattern: each format defines preamble (before fence) and code_prefix (inside fence)
-    let (preamble, code_prefix) = match config.format {
-        OutputFormat::Simple => (format!("{}\n\n", entry.relative), None),
-        OutputFormat::Comment => (String::new(), Some(format!("// {}\n", entry.relative))),
-        OutputFormat::Heading => (format!("## `{}`\n\n", entry.relative), None),
-    };
+    match config.format {
+        OutputFormat::Heredoc => render_heredoc(entry, buffer),
+        _ => {
+            // Strategy pattern: each format defines preamble (before fence) and code_prefix (inside fence)
+            let (preamble, code_prefix) = match config.format {
+                OutputFormat::Simple => (format!("{}\n\n", entry.relative), None),
+                OutputFormat::Comment => (String::new(), Some(format!("// {}\n", entry.relative))),
+                OutputFormat::Heading => (format!("## `{}`\n\n", entry.relative), None),
+                OutputFormat::Heredoc => unreachable!(),
+            };
 
-    buffer.push_str(&preamble);
-    render_fenced(entry, config, buffer, code_prefix.as_deref())
+            buffer.push_str(&preamble);
+            render_fenced(entry, config, buffer, code_prefix.as_deref())
+        }
+    }
+}
+
+fn render_heredoc(entry: &FileEntry, buffer: &mut String) -> Result<()> {
+    let delimiter = HeredocDelimiter::determine(&entry.contents);
+
+    // Determine the output path: use basename for files outside cwd or above it
+    let output_path = compute_heredoc_path(&entry.relative);
+
+    // Add directory creation if the file is in a subdirectory
+    if let Some(parent) = std::path::Path::new(output_path.as_str()).parent() {
+        if parent != std::path::Path::new("") {
+            buffer.push_str(&format!("mkdir -p '{}'\n", parent.display()));
+        }
+    }
+
+    // Generate heredoc command
+    buffer.push_str(&format!(
+        "cat > '{}' << '{}'\n",
+        output_path, delimiter.text
+    ));
+    buffer.push_str(&entry.contents);
+
+    // Ensure content ends with newline before closing delimiter
+    if !entry.contents.ends_with('\n') {
+        buffer.push('\n');
+    }
+
+    buffer.push_str(&delimiter.text);
+    buffer.push('\n');
+    Ok(())
+}
+
+fn compute_heredoc_path(relative: &camino::Utf8Path) -> String {
+    let path_str = relative.as_str();
+
+    // If it's an absolute path, use just the filename
+    if path_str.starts_with('/') {
+        return relative
+            .file_name()
+            .unwrap_or("output")
+            .to_string();
+    }
+
+    // If it contains ../ (going up), use just the filename
+    if path_str.contains("../") || path_str.starts_with("..") {
+        return relative
+            .file_name()
+            .unwrap_or("output")
+            .to_string();
+    }
+
+    // Otherwise, it's a proper relative path within cwd, use it as-is
+    path_str.to_string()
 }
 
 fn render_fenced(
@@ -92,5 +151,42 @@ impl Fence {
 
     fn close_line(&self) -> &str {
         &self.delimiter
+    }
+}
+
+struct HeredocDelimiter {
+    text: String,
+}
+
+impl HeredocDelimiter {
+    fn determine(content: &str) -> Self {
+        // Try standard delimiters first
+        let candidates = ["EOF", "END", "HEREDOC", "CONTENT", "DATA"];
+
+        for base in candidates {
+            if !Self::content_contains_line(content, base) {
+                return Self {
+                    text: base.to_string(),
+                };
+            }
+        }
+
+        // If all standard delimiters are taken, append a number
+        for i in 1..=99 {
+            let candidate = format!("EOF{}", i);
+            if !Self::content_contains_line(content, &candidate) {
+                return Self { text: candidate };
+            }
+        }
+
+        // Fallback to a very unlikely delimiter
+        Self {
+            text: "EOF_DELIMITER_999".to_string(),
+        }
+    }
+
+    fn content_contains_line(content: &str, needle: &str) -> bool {
+        // Check if the content contains the delimiter as a standalone line
+        content.lines().any(|line| line.trim() == needle)
     }
 }

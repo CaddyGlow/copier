@@ -899,3 +899,114 @@ fn extract_single_line_comment_hint() {
     let content = fs::read_to_string(extracted).unwrap();
     assert_eq!(content.trim(), "");
 }
+
+// ============================================================================
+// Heredoc Format Tests
+// ============================================================================
+
+/// Test heredoc format generates valid bash syntax
+#[test]
+fn heredoc_format_generates_valid_bash() {
+    let temp = TempDir::new();
+    let src_dir = temp.path().join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("main.rs"), "fn main() {}\n").unwrap();
+
+    let context = AppContext {
+        cwd: utf8(temp.path()),
+        verbosity: 0,
+    };
+
+    let output_path = utf8(temp.path().join("script.sh"));
+    let config = CopyConfig {
+        inputs: vec!["src/main.rs".to_string()],
+        output: Some(output_path.clone()),
+        format: OutputFormat::Heredoc,
+        fence: FencePreference::Auto,
+        respect_gitignore: true,
+        ignore_files: Vec::new(),
+        excludes: Vec::new(),
+    };
+
+    copy::run(&context, config).unwrap();
+
+    let script = fs::read_to_string(output_path.as_std_path()).unwrap();
+
+    // Verify basic structure
+    assert!(script.contains("mkdir -p 'src'"));
+    assert!(script.contains("cat > 'src/main.rs'"));
+    assert!(script.contains("EOF"));
+    assert!(script.contains("fn main() {}"));
+}
+
+/// Test heredoc format with path normalization
+#[test]
+fn heredoc_format_normalizes_paths() {
+    let temp = TempDir::new();
+
+    // Create a file outside the temp dir to test absolute path handling
+    let external_file = env::temp_dir().join("quickctx-test-external.txt");
+    fs::write(&external_file, "external content\n").unwrap();
+
+    let context = AppContext {
+        cwd: utf8(temp.path()),
+        verbosity: 0,
+    };
+
+    let output_path = utf8(temp.path().join("script.sh"));
+    let config = CopyConfig {
+        inputs: vec![external_file.to_string_lossy().to_string()],
+        output: Some(output_path.clone()),
+        format: OutputFormat::Heredoc,
+        fence: FencePreference::Auto,
+        respect_gitignore: true,
+        ignore_files: Vec::new(),
+        excludes: Vec::new(),
+    };
+
+    copy::run(&context, config).unwrap();
+
+    let script = fs::read_to_string(output_path.as_std_path()).unwrap();
+
+    // Should use just filename, not absolute path
+    assert!(!script.contains("cat > '/"));
+    assert!(script.contains("cat > 'quickctx-test-external.txt'"));
+
+    // Cleanup
+    let _ = fs::remove_file(external_file);
+}
+
+/// Test heredoc delimiter selection avoids conflicts
+#[test]
+fn heredoc_format_avoids_delimiter_conflicts() {
+    let temp = TempDir::new();
+    let file_path = temp.path().join("file.txt");
+
+    // Create content that contains EOF
+    fs::write(&file_path, "This has EOF\nand more EOF\nEOF\n").unwrap();
+
+    let context = AppContext {
+        cwd: utf8(temp.path()),
+        verbosity: 0,
+    };
+
+    let output_path = utf8(temp.path().join("script.sh"));
+    let config = CopyConfig {
+        inputs: vec!["file.txt".to_string()],
+        output: Some(output_path.clone()),
+        format: OutputFormat::Heredoc,
+        fence: FencePreference::Auto,
+        respect_gitignore: true,
+        ignore_files: Vec::new(),
+        excludes: Vec::new(),
+    };
+
+    copy::run(&context, config).unwrap();
+
+    let script = fs::read_to_string(output_path.as_std_path()).unwrap();
+
+    // Should use a different delimiter than EOF
+    assert!(script.contains("cat > 'file.txt' << 'END'") ||
+            script.contains("cat > 'file.txt' << 'HEREDOC'") ||
+            script.contains("cat > 'file.txt' << 'CONTENT'"));
+}
