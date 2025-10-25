@@ -190,6 +190,7 @@ jobs:
           echo "AR_${TARGET_ENV}=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
 
       - name: Build release binary
+        shell: bash
         run: |
           if [ "${{ matrix.musl }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }}
@@ -197,7 +198,24 @@ jobs:
             cargo build --release --target ${{ matrix.target }}
           fi
           
-      - name: Package artifact
+      - name: Package artifact (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $BIN = "quickctx"
+          $TARGET = "${{ matrix.target }}"
+
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item "target/$TARGET/release/$BIN${{ matrix.exe_suffix }}" "dist/$BIN${{ matrix.exe_suffix }}"
+
+          $ARCHIVE_NAME = "$BIN-$TARGET.zip"
+          Compress-Archive -Path "dist/$BIN${{ matrix.exe_suffix }}" -DestinationPath "dist/$ARCHIVE_NAME"
+
+          Write-Output "Created archive: $ARCHIVE_NAME"
+          Get-ChildItem dist
+
+      - name: Package artifact (Unix)
+        if: matrix.archive != 'zip'
         shell: bash
         run: |
           mkdir -p dist
@@ -207,15 +225,10 @@ jobs:
           # Copy the binary
           cp "target/$TARGET/release/$BIN${{ matrix.exe_suffix }}" "dist/$BIN${{ matrix.exe_suffix }}"
 
-          # Create archive with standard naming: quickctx-TARGET.{tar.gz|zip}
+          # Create archive with standard naming: quickctx-TARGET.tar.gz
           cd dist
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            ARCHIVE_NAME="$BIN-$TARGET.zip"
-            zip "$ARCHIVE_NAME" "$BIN${{ matrix.exe_suffix }}"
-          else
-            ARCHIVE_NAME="$BIN-$TARGET.tar.gz"
-            tar czf "$ARCHIVE_NAME" "$BIN${{ matrix.exe_suffix }}"
-          fi
+          ARCHIVE_NAME="$BIN-$TARGET.tar.gz"
+          tar czf "$ARCHIVE_NAME" "$BIN${{ matrix.exe_suffix }}"
 
           echo "Created archive: $ARCHIVE_NAME"
           ls -lh

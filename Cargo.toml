@@ -1,6 +1,6 @@
 [package]
 name = "quickctx"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Quickctx Contributors"]
 description = "A bidirectional file content aggregator and extractor that converts between files and markdown-formatted representations"
@@ -33,9 +33,11 @@ lsp-types = "0"
 shellexpand = "3.1"
 regex = "1.10"
 indicatif = "0.18"
-self_update = { version = "0.42", default-features = false, features = ["rustls"] }
+self_update = { version = "0.42", default-features = false, features = [
+  "rustls",
+] }
 dirs = "6.0"
-percent-encoding = "2.3.2"
+percent-encoding = "2.3"
 
 # cargo-binstall support
 # Enables fast binary installation via: cargo binstall quickctx
