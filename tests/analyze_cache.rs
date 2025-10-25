@@ -1,3 +1,17 @@
+// LSP Integration Tests for Cache Functionality
+//
+// These tests verify that the analyze command's caching system works correctly.
+// They invoke the quickctx-analyze binary which uses rust-analyzer as an LSP server.
+//
+// Behavior:
+// - If rust-analyzer is available (via `rust-analyzer --version`), tests run normally
+// - If rust-analyzer is not available (e.g., in CI), tests automatically skip
+// - Set QUICKCTX_TEST_LSP=1 to force running tests even if rust-analyzer isn't found
+//
+// In CI environments without rust-analyzer installed, these tests will gracefully
+// skip with a message rather than failing. This allows the test suite to pass
+// without requiring LSP server installation in the CI environment.
+
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -38,8 +52,26 @@ fn get_output(output: &std::process::Output) -> String {
     strip_ansi_codes(&format!("{}{}", stdout, stderr))
 }
 
+/// Returns true if LSP integration tests should run
+fn should_run_lsp_tests() -> bool {
+    // Check environment variable
+    std::env::var("QUICKCTX_TEST_LSP").is_ok()
+        // OR check if rust-analyzer is available
+        || Command::new("rust-analyzer")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+}
+
 #[test]
 fn test_cache_enables_faster_subsequent_runs() {
+    if !should_run_lsp_tests() {
+        eprintln!(
+            "Skipping LSP integration test (rust-analyzer not available or QUICKCTX_TEST_LSP not set)"
+        );
+        return;
+    }
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = TempDir::new().unwrap();
 
@@ -107,6 +139,12 @@ fn test_cache_enables_faster_subsequent_runs() {
 
 #[test]
 fn test_cache_invalidates_on_file_modification() {
+    if !should_run_lsp_tests() {
+        eprintln!(
+            "Skipping LSP integration test (rust-analyzer not available or QUICKCTX_TEST_LSP not set)"
+        );
+        return;
+    }
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = TempDir::new().unwrap();
 
@@ -157,6 +195,12 @@ fn test_cache_invalidates_on_file_modification() {
 
 #[test]
 fn test_no_cache_flag_bypasses_cache() {
+    if !should_run_lsp_tests() {
+        eprintln!(
+            "Skipping LSP integration test (rust-analyzer not available or QUICKCTX_TEST_LSP not set)"
+        );
+        return;
+    }
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = TempDir::new().unwrap();
 
@@ -200,6 +244,12 @@ fn test_no_cache_flag_bypasses_cache() {
 
 #[test]
 fn test_clear_cache_flag() {
+    if !should_run_lsp_tests() {
+        eprintln!(
+            "Skipping LSP integration test (rust-analyzer not available or QUICKCTX_TEST_LSP not set)"
+        );
+        return;
+    }
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = TempDir::new().unwrap();
 
@@ -249,6 +299,12 @@ fn test_clear_cache_flag() {
 
 #[test]
 fn test_cache_works_with_multiple_files() {
+    if !should_run_lsp_tests() {
+        eprintln!(
+            "Skipping LSP integration test (rust-analyzer not available or QUICKCTX_TEST_LSP not set)"
+        );
+        return;
+    }
     let temp_dir = TempDir::new().unwrap();
     let cache_dir = TempDir::new().unwrap();
 

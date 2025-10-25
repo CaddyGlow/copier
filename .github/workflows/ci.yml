@@ -40,6 +40,8 @@ jobs:
         #run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run tests
+        # Note: LSP integration tests (tests/analyze_cache.rs) will automatically
+        # skip if rust-analyzer is not available. Set QUICKCTX_TEST_LSP=1 to force them.
         run: cargo test --all-features
 
   build:
