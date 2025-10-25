@@ -20,7 +20,7 @@ jobs:
   ci:
     uses: CaddyGlow/homebrew-packages/.github/workflows/rust-ci.yml@main
     with:
-      binaries: '["quickctx"]'
+      binaries: '["quickctx", "quickctx-analyze"]'
       assets: '["README.md"]'
       test_command: 'cargo test --all-features'
       clippy_args: '--all-targets --all-features'
