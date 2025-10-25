@@ -1,6 +1,6 @@
 [package]
 name = "quickctx"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 authors = ["Quickctx Contributors"]
 description = "A bidirectional file content aggregator and extractor that converts between files and markdown-formatted representations"
