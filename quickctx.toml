@@ -1,0 +1,21 @@
+# Quickctx Configuration File
+
+[analyze]
+# Optional: default output format
+# format = "markdown"
+
+# Additional paths to search for LSP server binaries
+# These paths will be prepended to PATH when spawning LSP servers
+# Supports tilde expansion (e.g., ~/.local/bin)
+bin_paths = [
+  "~/.local/share/nvim/mason/bin", # Mason LSP servers
+  # "~/mycode/.venv/bin",            # Python virtual environment
+]
+
+# LSP server commands/paths by language
+[analyze.lsp_servers]
+rust = "rust-analyzer"
+python = "pyright-langserver --stdio"
+# typescript = "typescript-language-server --stdio"
+# javascript = "typescript-language-server --stdio"
+# go = "gopls"
