@@ -8,11 +8,11 @@ use dialoguer::Confirm;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use tracing::{info, warn};
 
-use crate::config::{AppContext, ConflictStrategy, ExtractConfig, InputSource};
+use crate::config::{AppContext, ConflictStrategy, InputSource, PasteConfig};
 use crate::error::{QuickctxError, Result};
 use crate::utils;
 
-pub fn run(_context: &AppContext, config: ExtractConfig) -> Result<()> {
+pub fn run(_context: &AppContext, config: PasteConfig) -> Result<()> {
     let markdown = read_input(&config.source)?;
     let blocks = parse_blocks(&markdown)?;
 
@@ -20,7 +20,7 @@ pub fn run(_context: &AppContext, config: ExtractConfig) -> Result<()> {
         write_block(&config, &block)?;
     }
 
-    info!("extraction complete");
+    info!("paste complete");
     Ok(())
 }
 
@@ -310,7 +310,7 @@ impl BlockState {
     }
 }
 
-fn write_block(config: &ExtractConfig, block: &FileBlock) -> Result<()> {
+fn write_block(config: &PasteConfig, block: &FileBlock) -> Result<()> {
     let destination = config.output_dir.join(&block.path);
 
     if destination.exists() && !should_overwrite(&destination, config.conflict)? {

@@ -1,9 +1,9 @@
-pub mod aggregate;
 pub mod analyze;
 pub mod cli;
 pub mod config;
+pub mod copy;
 pub mod error;
-pub mod extract;
+pub mod paste;
 pub mod render;
 pub mod telemetry;
 pub mod utils;
@@ -18,7 +18,7 @@ pub fn run(cli: Cli) -> Result<()> {
     telemetry::init(runtime.context.verbosity)?;
 
     match runtime.mode {
-        ModeConfig::Aggregate(cfg) => aggregate::run(&runtime.context, cfg),
-        ModeConfig::Extract(cfg) => extract::run(&runtime.context, cfg),
+        ModeConfig::Copy(cfg) => copy::run(&runtime.context, cfg),
+        ModeConfig::Paste(cfg) => paste::run(&runtime.context, cfg),
     }
 }

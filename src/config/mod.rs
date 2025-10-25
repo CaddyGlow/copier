@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 use strum::{Display, EnumString};
 
-use crate::cli::{AggregateArgs, Cli, Commands, ExtractArgs};
+use crate::cli::{Cli, Commands, CopyArgs, PasteArgs};
 use crate::error::{QuickctxError, Result};
 
 #[derive(
@@ -59,12 +59,12 @@ pub struct AppContext {
 
 #[derive(Debug, Clone)]
 pub enum ModeConfig {
-    Aggregate(AggregateConfig),
-    Extract(ExtractConfig),
+    Copy(CopyConfig),
+    Paste(PasteConfig),
 }
 
 #[derive(Debug, Clone)]
-pub struct AggregateConfig {
+pub struct CopyConfig {
     pub inputs: Vec<String>,
     pub output: Option<Utf8PathBuf>,
     pub format: OutputFormat,
@@ -74,7 +74,7 @@ pub struct AggregateConfig {
     pub excludes: Vec<String>,
 }
 
-impl AggregateConfig {
+impl CopyConfig {
     pub fn require_inputs(&self) -> Result<()> {
         if self.inputs.is_empty() {
             return Err(QuickctxError::InvalidArgument(
@@ -92,7 +92,7 @@ pub enum InputSource {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExtractConfig {
+pub struct PasteConfig {
     pub source: InputSource,
     pub output_dir: Utf8PathBuf,
     pub conflict: ConflictStrategy,
@@ -102,7 +102,7 @@ pub struct ExtractConfig {
 // Configuration Builders
 // ============================================================================
 
-struct AggregateConfigBuilder {
+struct CopyConfigBuilder {
     inputs: Vec<String>,
     output: Option<Utf8PathBuf>,
     format: OutputFormat,
@@ -112,7 +112,7 @@ struct AggregateConfigBuilder {
     excludes: Vec<String>,
 }
 
-impl AggregateConfigBuilder {
+impl CopyConfigBuilder {
     fn new() -> Self {
         Self {
             inputs: Vec::new(),
@@ -125,7 +125,7 @@ impl AggregateConfigBuilder {
         }
     }
 
-    fn with_file_config(mut self, file: &AggregateSection) -> Self {
+    fn with_file_config(mut self, file: &CopySection) -> Self {
         // Vecs: file values go first
         self.inputs = file.paths.clone();
         self.ignore_files = file.ignore_files.clone();
@@ -148,7 +148,7 @@ impl AggregateConfigBuilder {
         self
     }
 
-    fn with_cli_args(mut self, args: &AggregateArgs) -> Result<Self> {
+    fn with_cli_args(mut self, args: &CopyArgs) -> Result<Self> {
         // Vecs: CLI values extend file values
         self.inputs
             .extend(args.paths.iter().map(|p| p.to_string_lossy().to_string()));
@@ -177,8 +177,8 @@ impl AggregateConfigBuilder {
         Ok(self)
     }
 
-    fn build(self) -> AggregateConfig {
-        AggregateConfig {
+    fn build(self) -> CopyConfig {
+        CopyConfig {
             inputs: self.inputs,
             output: self.output,
             format: self.format,
@@ -190,13 +190,13 @@ impl AggregateConfigBuilder {
     }
 }
 
-struct ExtractConfigBuilder {
+struct PasteConfigBuilder {
     output_dir: Utf8PathBuf,
     conflict: ConflictStrategy,
     source: Option<InputSource>,
 }
 
-impl ExtractConfigBuilder {
+impl PasteConfigBuilder {
     fn new(cwd: Utf8PathBuf) -> Self {
         Self {
             output_dir: cwd,
@@ -205,7 +205,7 @@ impl ExtractConfigBuilder {
         }
     }
 
-    fn with_file_config(mut self, file: &ExtractSection) -> Self {
+    fn with_file_config(mut self, file: &PasteSection) -> Self {
         if let Some(dir) = &file.output_dir {
             self.output_dir = dir.clone();
         }
@@ -215,7 +215,7 @@ impl ExtractConfigBuilder {
         self
     }
 
-    fn with_cli_args(mut self, args: &ExtractArgs) -> Result<Self> {
+    fn with_cli_args(mut self, args: &PasteArgs) -> Result<Self> {
         if let Some(dir) = &args.output_dir {
             self.output_dir = to_utf8_path(dir.clone())?;
         }
@@ -231,8 +231,8 @@ impl ExtractConfigBuilder {
         Ok(self)
     }
 
-    fn build(self) -> ExtractConfig {
-        ExtractConfig {
+    fn build(self) -> PasteConfig {
+        PasteConfig {
             source: self.source.unwrap_or(InputSource::Stdin),
             output_dir: self.output_dir,
             conflict: self.conflict,
@@ -256,17 +256,17 @@ pub fn load(cli: &Cli) -> Result<RuntimeConfig> {
     let context = AppContext { cwd, verbosity };
 
     let mode = match &cli.command {
-        Some(Commands::Aggregate(args)) => {
-            let cfg = build_aggregate_config(Some(args), &cli.aggregate, &file_config)?;
-            ModeConfig::Aggregate(cfg)
+        Some(Commands::Copy(args)) => {
+            let cfg = build_copy_config(Some(args), &cli.copy, &file_config)?;
+            ModeConfig::Copy(cfg)
         }
-        Some(Commands::Extract(args)) => {
-            let cfg = build_extract_config(args, &file_config, &context)?;
-            ModeConfig::Extract(cfg)
+        Some(Commands::Paste(args)) => {
+            let cfg = build_paste_config(args, &file_config, &context)?;
+            ModeConfig::Paste(cfg)
         }
         None => {
-            let cfg = build_aggregate_config(None, &cli.aggregate, &file_config)?;
-            ModeConfig::Aggregate(cfg)
+            let cfg = build_copy_config(None, &cli.copy, &file_config)?;
+            ModeConfig::Copy(cfg)
         }
     };
 
@@ -286,28 +286,28 @@ fn resolve_config_path(cli: &Cli, cwd: &Utf8Path) -> Option<Utf8PathBuf> {
     }
 }
 
-fn build_aggregate_config(
-    override_args: Option<&AggregateArgs>,
-    default_args: &AggregateArgs,
+fn build_copy_config(
+    override_args: Option<&CopyArgs>,
+    default_args: &CopyArgs,
     file_config: &FileConfig,
-) -> Result<AggregateConfig> {
+) -> Result<CopyConfig> {
     let args = override_args.unwrap_or(default_args);
 
-    let config = AggregateConfigBuilder::new()
-        .with_file_config(&file_config.aggregate)
+    let config = CopyConfigBuilder::new()
+        .with_file_config(&file_config.copy)
         .with_cli_args(args)?
         .build();
 
     Ok(config)
 }
 
-fn build_extract_config(
-    args: &ExtractArgs,
+fn build_paste_config(
+    args: &PasteArgs,
     file_config: &FileConfig,
     context: &AppContext,
-) -> Result<ExtractConfig> {
-    let config = ExtractConfigBuilder::new(context.cwd.clone())
-        .with_file_config(&file_config.extractor)
+) -> Result<PasteConfig> {
+    let config = PasteConfigBuilder::new(context.cwd.clone())
+        .with_file_config(&file_config.paste)
         .with_cli_args(args)?
         .build();
 
@@ -354,9 +354,9 @@ pub fn load_analyze_config(config_path: Option<&std::path::Path>) -> Result<Anal
 #[derive(Debug, Default, Deserialize)]
 struct FileConfig {
     #[serde(default)]
-    aggregate: AggregateSection,
+    copy: CopySection,
     #[serde(default)]
-    extractor: ExtractSection,
+    paste: PasteSection,
     #[serde(default)]
     general: GeneralSection,
     #[serde(default)]
@@ -364,7 +364,7 @@ struct FileConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct AggregateSection {
+struct CopySection {
     #[serde(default)]
     paths: Vec<String>,
     #[serde(default)]
@@ -382,7 +382,7 @@ struct AggregateSection {
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct ExtractSection {
+struct PasteSection {
     #[serde(default)]
     output_dir: Option<Utf8PathBuf>,
     #[serde(default)]

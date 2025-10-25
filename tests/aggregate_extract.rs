@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 
 use camino::Utf8PathBuf;
 
-use quickctx::aggregate;
+use quickctx::copy;
 use quickctx::config::{
-    AggregateConfig, AppContext, ConflictStrategy, ExtractConfig, FencePreference, InputSource,
+    CopyConfig, AppContext, ConflictStrategy, PasteConfig, FencePreference, InputSource,
     OutputFormat,
 };
-use quickctx::extract;
+use quickctx::paste;
 
 struct TempDir {
     path: PathBuf,
@@ -57,7 +57,7 @@ fn aggregate_single_file_to_markdown_file() {
     };
 
     let output_path = utf8(temp.path().join("aggregate.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec!["src/main.rs".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -67,7 +67,7 @@ fn aggregate_single_file_to_markdown_file() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
 
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
     let expected = "src/main.rs\n\n```rust\nfn main() { println!(\"hi\"); }\n```\n\n";
@@ -87,7 +87,7 @@ fn aggregate_respects_gitignore_patterns() {
     };
 
     let output_path = utf8(temp.path().join("doc.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec![".".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -97,7 +97,7 @@ fn aggregate_respects_gitignore_patterns() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     assert!(!markdown.contains("ignored.log"));
@@ -121,7 +121,7 @@ fn extract_round_trip_recreates_files() {
     };
 
     let aggregate_output = utf8(temp.path().join("roundtrip.md"));
-    let aggregate_config = AggregateConfig {
+    let aggregate_config = CopyConfig {
         inputs: vec!["src/lib.rs".to_string()],
         output: Some(aggregate_output.clone()),
         format: OutputFormat::Simple,
@@ -130,15 +130,15 @@ fn extract_round_trip_recreates_files() {
         ignore_files: Vec::new(),
         excludes: Vec::new(),
     };
-    aggregate::run(&context, aggregate_config).unwrap();
+    copy::run(&context, aggregate_config).unwrap();
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(aggregate_output.clone()),
         output_dir: utf8(temp.path().join("restored")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     let restored = temp.path().join("restored/src/lib.rs");
     let contents = fs::read_to_string(restored).unwrap();
@@ -167,13 +167,13 @@ fn main() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Should extract to src/main.rs (from comment hint), NOT "This is a regular heading"
     let extracted = temp.path().join("output/src/main.rs");
@@ -210,13 +210,13 @@ pub fn hello() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Should extract to src/lib.rs (from heading in backticks)
     let extracted = temp.path().join("output/src/lib.rs");
@@ -251,13 +251,13 @@ fn main() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Should use comment hint (correct/path.rs), NOT heading hint (wrong/path.rs)
     let correct = temp.path().join("output/correct/path.rs");
@@ -300,13 +300,13 @@ fn extract_supports_multiple_comment_styles() {
         };
 
         let output_dir = temp.path().join(format!("output{}", i));
-        let extract_config = ExtractConfig {
+        let extract_config = PasteConfig {
             source: InputSource::File(utf8(&md_path)),
             output_dir: utf8(&output_dir),
             conflict: ConflictStrategy::Overwrite,
         };
 
-        extract::run(&context, extract_config).unwrap();
+        paste::run(&context, extract_config).unwrap();
 
         let extracted = output_dir.join(expected_file);
         assert!(
@@ -329,13 +329,13 @@ fn extract_error_includes_file_path() {
     };
 
     let nonexistent = utf8(temp.path().join("nonexistent.md"));
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(nonexistent.clone()),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    let result = extract::run(&context, extract_config);
+    let result = paste::run(&context, extract_config);
 
     assert!(result.is_err(), "Should fail when file doesn't exist");
 
@@ -371,13 +371,13 @@ fn main() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Should use the last heading
     let correct = temp.path().join("output/correct/third.rs");
@@ -413,13 +413,13 @@ fn main() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     let correct = temp.path().join("output/correct.rs");
     assert!(
@@ -476,13 +476,13 @@ fn test_it() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // All three files should be extracted
     let main_file = temp.path().join("output/src/main.rs");
@@ -530,13 +530,13 @@ fn code() {}
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     let extracted = temp.path().join("output/src/file.rs");
     assert!(
@@ -561,7 +561,7 @@ fn aggregate_with_glob_patterns() {
     };
 
     let output_path = utf8(temp.path().join("output.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec!["src/*.rs".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -571,7 +571,7 @@ fn aggregate_with_glob_patterns() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     // Should match both files in src/
@@ -596,7 +596,7 @@ fn aggregate_with_exclude_patterns() {
     };
 
     let output_path = utf8(temp.path().join("output.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec!["src/".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -606,7 +606,7 @@ fn aggregate_with_exclude_patterns() {
         excludes: vec!["**/test.rs".to_string()],
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     assert!(markdown.contains("main.rs"));
@@ -634,7 +634,7 @@ fn aggregate_skips_binary_files() {
     };
 
     let output_path = utf8(temp.path().join("output.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec!["src/".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -644,7 +644,7 @@ fn aggregate_skips_binary_files() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     assert!(markdown.contains("main.rs"));
@@ -666,7 +666,7 @@ fn aggregate_without_gitignore() {
     };
 
     let output_path = utf8(temp.path().join("output.md"));
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec![".".to_string()],
         output: Some(output_path.clone()),
         format: OutputFormat::Simple,
@@ -676,7 +676,7 @@ fn aggregate_without_gitignore() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, config).unwrap();
+    copy::run(&context, config).unwrap();
     let markdown = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     // Both files should be included when gitignore is disabled
@@ -703,13 +703,13 @@ fn extract_error_empty_path() {
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    let result = extract::run(&context, extract_config);
+    let result = paste::run(&context, extract_config);
     assert!(result.is_err());
     assert!(
         result
@@ -739,13 +739,13 @@ should not work
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    let result = extract::run(&context, extract_config);
+    let result = paste::run(&context, extract_config);
     assert!(result.is_err());
     assert!(
         result
@@ -775,13 +775,13 @@ should not work
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    let result = extract::run(&context, extract_config);
+    let result = paste::run(&context, extract_config);
     assert!(result.is_err());
     assert!(
         result
@@ -815,13 +815,13 @@ new content
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Skip,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // File should still have original content
     let content = fs::read_to_string(temp.path().join("output/src/main.rs")).unwrap();
@@ -852,13 +852,13 @@ new content
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // File should have new content
     let content = fs::read_to_string(temp.path().join("output/src/main.rs")).unwrap();
@@ -884,13 +884,13 @@ fn extract_single_line_comment_hint() {
         verbosity: 0,
     };
 
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(utf8(&md_path)),
         output_dir: utf8(temp.path().join("output")),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     let extracted = temp.path().join("output/src/single.rs");
     assert!(extracted.exists());

@@ -17,7 +17,7 @@ pub struct Cli {
 
     /// Copy arguments (available by default)
     #[command(flatten)]
-    pub aggregate: AggregateArgs,
+    pub copy: CopyArgs,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -25,15 +25,15 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Extract files from a markdown document
-    Extract(ExtractArgs),
+    /// Paste files from a markdown document
+    Paste(PasteArgs),
 
     /// Explicit copy mode (equivalent to default invocation)
-    Aggregate(AggregateArgs),
+    Copy(CopyArgs),
 }
 
 #[derive(Args, Debug, Default, Clone)]
-pub struct AggregateArgs {
+pub struct CopyArgs {
     /// Files, directories, or glob patterns to copy
     #[arg(value_name = "PATH", required = false)]
     pub paths: Vec<PathBuf>,
@@ -64,7 +64,7 @@ pub struct AggregateArgs {
 }
 
 #[derive(Args, Debug, Clone)]
-pub struct ExtractArgs {
+pub struct PasteArgs {
     /// Markdown input file (omit to read from stdin)
     #[arg(value_name = "INPUT", required = false)]
     pub input: Option<PathBuf>,

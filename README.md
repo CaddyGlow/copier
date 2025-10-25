@@ -92,13 +92,13 @@ Convert markdown back to files:
 
 ```bash
 # Paste from file
-quickctx extract project.md
+quickctx paste project.md
 
 # Paste from stdin
-cat project.md | quickctx extract
+cat project.md | quickctx paste
 
 # Paste to specific directory
-quickctx extract project.md -o restored/
+quickctx paste project.md -o restored/
 ```
 
 ### Analyze Code
@@ -148,7 +148,7 @@ Options:
 ### Paste Mode
 
 ```bash
-quickctx extract [OPTIONS] [INPUT]
+quickctx paste [OPTIONS] [INPUT]
 
 Arguments:
   [INPUT]                  Markdown input file (omit to read from stdin)
@@ -330,7 +330,7 @@ Create a `quickctx.toml` file for project-specific settings:
 [general]
 verbose = 1
 
-[aggregate]
+[copy]
 # Copy mode settings
 paths = ["src/", "tests/"]
 format = "heading"
@@ -340,7 +340,7 @@ exclude = ["*.tmp", "*.bak"]
 # output = "project.md"
 # ignore_files = [".customignore"]
 
-[extractor]
+[paste]
 # Paste mode settings
 # output_dir = "restored/"
 conflict = "skip"
@@ -437,7 +437,7 @@ quickctx-analyze src/main.rs src/lib.rs -o symbols.md
 Paste code examples from documentation:
 
 ```bash
-quickctx extract API_EXAMPLES.md -o examples/
+quickctx paste API_EXAMPLES.md -o examples/
 ```
 
 ### Example 4: Project Templates
@@ -449,7 +449,7 @@ Create and instantiate project templates:
 quickctx template-project/ -o rust-template.md
 
 # Paste template
-quickctx extract rust-template.md -o my-new-project/
+quickctx paste rust-template.md -o my-new-project/
 ```
 
 ### Example 5: Code Analysis

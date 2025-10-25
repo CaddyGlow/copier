@@ -7,7 +7,7 @@ use std::io::Write;
 use camino::Utf8PathBuf;
 use tracing::debug;
 
-use crate::config::{AggregateConfig, AppContext};
+use crate::config::{AppContext, CopyConfig};
 use crate::error::Result;
 use crate::render;
 
@@ -19,7 +19,7 @@ pub struct FileEntry {
     pub language: Option<String>,
 }
 
-pub fn run(context: &AppContext, config: AggregateConfig) -> Result<()> {
+pub fn run(context: &AppContext, config: CopyConfig) -> Result<()> {
     config.require_inputs()?;
 
     let entries = collector::collect_entries(context, &config)?;
@@ -30,10 +30,10 @@ pub fn run(context: &AppContext, config: AggregateConfig) -> Result<()> {
     Ok(())
 }
 
-fn write_output(config: &AggregateConfig, document: &str) -> Result<()> {
+fn write_output(config: &CopyConfig, document: &str) -> Result<()> {
     if let Some(output) = &config.output {
         crate::utils::write_with_parent(output, document.as_bytes())?;
-        debug!(path = %output, "wrote aggregated markdown");
+        debug!(path = %output, "wrote copied markdown");
     } else {
         let mut stdout = std::io::stdout().lock();
         stdout.write_all(document.as_bytes())?;

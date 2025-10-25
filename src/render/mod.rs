@@ -1,8 +1,8 @@
-use crate::aggregate::FileEntry;
-use crate::config::{AggregateConfig, FencePreference, OutputFormat};
+use crate::config::{CopyConfig, FencePreference, OutputFormat};
+use crate::copy::FileEntry;
 use crate::error::Result;
 
-pub fn render_entries(entries: &[FileEntry], config: &AggregateConfig) -> Result<String> {
+pub fn render_entries(entries: &[FileEntry], config: &CopyConfig) -> Result<String> {
     let mut buffer = String::new();
 
     for (idx, entry) in entries.iter().enumerate() {
@@ -19,7 +19,7 @@ pub fn render_entries(entries: &[FileEntry], config: &AggregateConfig) -> Result
     Ok(buffer)
 }
 
-fn render_entry(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String) -> Result<()> {
+fn render_entry(entry: &FileEntry, config: &CopyConfig, buffer: &mut String) -> Result<()> {
     // Strategy pattern: each format defines preamble (before fence) and code_prefix (inside fence)
     let (preamble, code_prefix) = match config.format {
         OutputFormat::Simple => (format!("{}\n\n", entry.relative), None),
@@ -33,7 +33,7 @@ fn render_entry(entry: &FileEntry, config: &AggregateConfig, buffer: &mut String
 
 fn render_fenced(
     entry: &FileEntry,
-    config: &AggregateConfig,
+    config: &CopyConfig,
     buffer: &mut String,
     prefix: Option<&str>,
 ) -> Result<()> {
