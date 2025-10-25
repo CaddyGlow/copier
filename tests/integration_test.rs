@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use camino::Utf8PathBuf;
 
 use quickctx::config::{
-    AggregateConfig, AppContext, ConflictStrategy, ExtractConfig, FencePreference, InputSource,
-    OutputFormat,
+    AppContext, ConflictStrategy, CopyConfig, FencePreference, InputSource, OutputFormat,
+    PasteConfig,
 };
 use quickctx::{aggregate, extract};
 
@@ -109,7 +109,7 @@ version = "0.1.0"
         let aggregate_output = temp.path().join(format!("{}_aggregate.md", format_name));
 
         // Aggregate
-        let aggregate_config = AggregateConfig {
+        let aggregate_config = CopyConfig {
             inputs: vec![
                 "src/".to_string(),
                 "tests/".to_string(),
@@ -123,18 +123,18 @@ version = "0.1.0"
             excludes: Vec::new(),
         };
 
-        aggregate::run(&context, aggregate_config).unwrap();
+        copy::run(&context, aggregate_config).unwrap();
         assert!(aggregate_output.exists());
 
         // Extract to different directory
         let extract_output = temp.path().join(format!("{}_extracted", format_name));
-        let extract_config = ExtractConfig {
+        let extract_config = PasteConfig {
             source: InputSource::File(aggregate_output.clone()),
             output_dir: extract_output.clone(),
             conflict: ConflictStrategy::Overwrite,
         };
 
-        extract::run(&context, extract_config).unwrap();
+        paste::run(&context, extract_config).unwrap();
 
         // Verify all files were extracted correctly
         assert!(extract_output.join("src/main.rs").exists());
@@ -173,7 +173,7 @@ fn integration_nested_directory_structure() {
 
     // Aggregate all files
     let aggregate_output = temp.path().join("nested.md");
-    let aggregate_config = AggregateConfig {
+    let aggregate_config = CopyConfig {
         inputs: vec![".".to_string()],
         output: Some(aggregate_output.clone()),
         format: OutputFormat::Simple,
@@ -183,17 +183,17 @@ fn integration_nested_directory_structure() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, aggregate_config).unwrap();
+    copy::run(&context, aggregate_config).unwrap();
 
     // Extract to new location
     let extract_output = temp.path().join("restored");
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(aggregate_output),
         output_dir: extract_output.clone(),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Verify all nested paths exist
     for path in &paths {
@@ -243,7 +243,7 @@ fn integration_mixed_content_types() {
 
     // Aggregate with heading format
     let aggregate_output = temp.path().join("mixed.md");
-    let aggregate_config = AggregateConfig {
+    let aggregate_config = CopyConfig {
         inputs: vec![".".to_string()],
         output: Some(aggregate_output.clone()),
         format: OutputFormat::Heading,
@@ -253,7 +253,7 @@ fn integration_mixed_content_types() {
         excludes: Vec::new(),
     };
 
-    aggregate::run(&context, aggregate_config).unwrap();
+    copy::run(&context, aggregate_config).unwrap();
 
     let markdown = fs::read_to_string(aggregate_output.as_std_path()).unwrap();
 
@@ -271,13 +271,13 @@ fn integration_mixed_content_types() {
 
     // Extract and verify
     let extract_output = temp.path().join("mixed_extracted");
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(temp.path().join("mixed.md")),
         output_dir: extract_output.clone(),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     // Check all files exist and have correct content
     assert!(
@@ -328,7 +328,7 @@ fn integration_glob_patterns_with_excludes() {
 
     // Aggregate with glob and excludes
     let aggregate_output = temp.path().join("filtered.md");
-    let aggregate_config = AggregateConfig {
+    let aggregate_config = CopyConfig {
         inputs: vec!["**/*.rs".to_string()],
         output: Some(aggregate_output.clone()),
         format: OutputFormat::Comment,
@@ -338,7 +338,7 @@ fn integration_glob_patterns_with_excludes() {
         excludes: vec!["**/target/**".to_string(), "**/*_test.rs".to_string()],
     };
 
-    aggregate::run(&context, aggregate_config).unwrap();
+    copy::run(&context, aggregate_config).unwrap();
 
     let markdown = fs::read_to_string(aggregate_output.as_std_path()).unwrap();
 
@@ -353,13 +353,13 @@ fn integration_glob_patterns_with_excludes() {
 
     // Extract and verify
     let extract_output = temp.path().join("filtered_extracted");
-    let extract_config = ExtractConfig {
+    let extract_config = PasteConfig {
         source: InputSource::File(aggregate_output),
         output_dir: extract_output.clone(),
         conflict: ConflictStrategy::Overwrite,
     };
 
-    extract::run(&context, extract_config).unwrap();
+    paste::run(&context, extract_config).unwrap();
 
     assert!(extract_output.join("src/main.rs").exists());
     assert!(extract_output.join("src/lib.rs").exists());

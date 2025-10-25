@@ -3,9 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use quickctx::cli::{AggregateArgs, Cli, Commands, ExtractArgs};
+use quickctx::cli::{Cli, Commands, CopyArgs, PasteArgs};
 use quickctx::config::{
-    self, AggregateConfig, ConflictStrategy, FencePreference, ModeConfig, OutputFormat,
+    self, ConflictStrategy, CopyConfig, FencePreference, ModeConfig, OutputFormat,
 };
 
 // Mutex to serialize tests that change current directory
@@ -57,7 +57,7 @@ fn test_conflict_strategy_default() {
 
 #[test]
 fn test_aggregate_config_require_inputs_empty() {
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec![],
         output: None,
         format: OutputFormat::Simple,
@@ -74,7 +74,7 @@ fn test_aggregate_config_require_inputs_empty() {
 
 #[test]
 fn test_aggregate_config_require_inputs_with_paths() {
-    let config = AggregateConfig {
+    let config = CopyConfig {
         inputs: vec!["src/".to_string()],
         output: None,
         format: OutputFormat::Simple,
@@ -97,7 +97,7 @@ fn test_load_config_default_aggregate_mode() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -116,7 +116,7 @@ fn test_load_config_default_aggregate_mode() {
     assert_eq!(runtime_config.context.verbosity, 0);
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             assert_eq!(cfg.inputs.len(), 1);
             assert_eq!(cfg.inputs[0], "src/");
             assert_eq!(cfg.format, OutputFormat::Simple);
@@ -139,8 +139,8 @@ fn test_load_config_explicit_aggregate_mode() {
     let cli = Cli {
         config: None,
         verbose: 1,
-        aggregate: AggregateArgs::default(),
-        command: Some(Commands::Aggregate(AggregateArgs {
+        aggregate: CopyArgs::default(),
+        command: Some(Commands::Copy(CopyArgs {
             paths: vec![PathBuf::from("lib/")],
             output: Some(PathBuf::from("out.md")),
             format: Some(OutputFormat::Comment),
@@ -158,7 +158,7 @@ fn test_load_config_explicit_aggregate_mode() {
     assert_eq!(runtime_config.context.verbosity, 1);
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             assert_eq!(cfg.inputs[0], "lib/");
             assert!(cfg.output.is_some());
             assert_eq!(cfg.format, OutputFormat::Comment);
@@ -186,8 +186,8 @@ fn test_load_config_extract_mode_from_file() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs::default(),
-        command: Some(Commands::Extract(ExtractArgs {
+        aggregate: CopyArgs::default(),
+        command: Some(Commands::Paste(PasteArgs {
             input: Some(input_path.clone()),
             output_dir: Some(PathBuf::from("extracted/")),
             conflict: Some(ConflictStrategy::Overwrite),
@@ -200,7 +200,7 @@ fn test_load_config_extract_mode_from_file() {
     let runtime_config = result.unwrap();
 
     match runtime_config.mode {
-        ModeConfig::Extract(cfg) => {
+        ModeConfig::Paste(cfg) => {
             assert_eq!(cfg.conflict, ConflictStrategy::Overwrite);
             assert_eq!(cfg.output_dir.as_str(), "extracted/");
         }
@@ -220,8 +220,8 @@ fn test_load_config_extract_mode_from_stdin() {
     let cli = Cli {
         config: None,
         verbose: 2,
-        aggregate: AggregateArgs::default(),
-        command: Some(Commands::Extract(ExtractArgs {
+        aggregate: CopyArgs::default(),
+        command: Some(Commands::Paste(PasteArgs {
             input: None,
             output_dir: None,
             conflict: Some(ConflictStrategy::Skip),
@@ -235,7 +235,7 @@ fn test_load_config_extract_mode_from_stdin() {
     assert_eq!(runtime_config.context.verbosity, 2);
 
     match runtime_config.mode {
-        ModeConfig::Extract(cfg) => {
+        ModeConfig::Paste(cfg) => {
             assert_eq!(cfg.conflict, ConflictStrategy::Skip);
             // Should use current directory as output_dir
         }
@@ -273,7 +273,7 @@ conflict = "overwrite"
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs::default(),
+        aggregate: CopyArgs::default(),
         command: None,
     };
 
@@ -285,7 +285,7 @@ conflict = "overwrite"
     assert_eq!(runtime_config.context.verbosity, 1);
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             assert_eq!(cfg.inputs.len(), 2);
             assert!(cfg.inputs.contains(&"src/".to_string()));
             assert!(cfg.inputs.contains(&"tests/".to_string()));
@@ -319,7 +319,7 @@ format = "simple"
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("from-cli/")],
             format: Some(OutputFormat::Comment),
             output: None,
@@ -337,7 +337,7 @@ format = "simple"
     let runtime_config = result.unwrap();
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             // CLI paths should be appended to file paths
             assert!(cfg.inputs.contains(&"from-cli/".to_string()));
             // CLI format should override file format
@@ -367,7 +367,7 @@ verbose = 3
     let cli = Cli {
         config: Some(custom_config_path),
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -402,7 +402,7 @@ fn test_load_config_invalid_toml() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -436,7 +436,7 @@ fn test_aggregate_config_with_multiple_ignore_files() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -454,7 +454,7 @@ fn test_aggregate_config_with_multiple_ignore_files() {
     let runtime_config = result.unwrap();
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             assert_eq!(cfg.ignore_files.len(), 2);
         }
         _ => panic!("Expected Aggregate mode"),
@@ -473,7 +473,7 @@ fn test_aggregate_config_no_gitignore_flag() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -491,7 +491,7 @@ fn test_aggregate_config_no_gitignore_flag() {
     let runtime_config = result.unwrap();
 
     match runtime_config.mode {
-        ModeConfig::Aggregate(cfg) => {
+        ModeConfig::Copy(cfg) => {
             assert!(!cfg.respect_gitignore);
         }
         _ => panic!("Expected Aggregate mode"),
@@ -517,7 +517,7 @@ verbose = 2
     let cli = Cli {
         config: None,
         verbose: 1,
-        aggregate: AggregateArgs {
+        aggregate: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,

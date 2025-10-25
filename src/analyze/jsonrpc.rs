@@ -469,9 +469,10 @@ impl JsonRpcTransport {
         let receiver = {
             let mut pending = self.pending_receivers.lock().unwrap();
             pending.remove(&id).ok_or_else(|| {
-                QuickctxError::Io(std::io::Error::other(
-                    format!("No pending request with id={}", id),
-                ))
+                QuickctxError::Io(std::io::Error::other(format!(
+                    "No pending request with id={}",
+                    id
+                )))
             })?
         };
 

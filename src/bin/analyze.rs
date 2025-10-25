@@ -1,4 +1,5 @@
 use clap::Parser;
+use ignore::WalkBuilder;
 use quickctx::analyze::{
     LspClient, LspServerConfig, OutputFormat, ProjectType, RelativePath, SymbolCache, SymbolIndex,
     SymbolInfo, TypeExtractor, TypeResolver, detect_project_root, extract_project_name,
@@ -6,7 +7,6 @@ use quickctx::analyze::{
 };
 use quickctx::config::{AnalyzeSection, load_analyze_config};
 use quickctx::error::Result;
-use ignore::WalkBuilder;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -37,7 +37,8 @@ fn parse_symbol_filter(filter_arg: &str) -> Result<Vec<String>> {
 
     let names: Vec<String> = if filter_path.exists() && filter_path.is_file() {
         // Read from file - parse lines like "symbol_name (kind) - file:line"
-        let content = fs::read_to_string(&filter_path).map_err(quickctx::error::QuickctxError::Io)?;
+        let content =
+            fs::read_to_string(&filter_path).map_err(quickctx::error::QuickctxError::Io)?;
 
         content
             .lines()
@@ -49,12 +50,9 @@ fn parse_symbol_filter(filter_arg: &str) -> Result<Vec<String>> {
 
                 // Parse format: "symbol_name (kind) - file:line"
                 // Extract just the symbol name (everything before the first space or '(')
-                let name = line
-                    .split(&[' ', '('][..])
+                line.split(&[' ', '('][..])
                     .next()
-                    .map(|s| s.trim().to_string());
-
-                name
+                    .map(|s| s.trim().to_string())
             })
             .collect()
     } else {
@@ -919,7 +917,7 @@ fn walk_directory(
     files: &mut Vec<PathBuf>,
     progress: Option<&quickctx::analyze::progress::ProgressDisplay>,
 ) -> Result<()> {
-    let spinner = progress.map(|p| p.spinner(format!("[1/4] Finding source files")));
+    let spinner = progress.map(|p| p.spinner("[1/4] Finding source files".to_string()));
 
     let mut builder = WalkBuilder::new(dir);
     builder.follow_links(false);

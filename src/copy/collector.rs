@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use tracing::{debug, warn};
 
-use crate::config::{AggregateConfig, AppContext};
+use crate::config::{AppContext, CopyConfig};
 use crate::error::{QuickctxError, Result};
 use crate::utils;
 
@@ -14,7 +14,7 @@ use super::glob_expansion;
 use super::walker_config::WalkerConfigBuilder;
 
 /// Collects file entries based on the provided configuration.
-pub fn collect_entries(context: &AppContext, config: &AggregateConfig) -> Result<Vec<FileEntry>> {
+pub fn collect_entries(context: &AppContext, config: &CopyConfig) -> Result<Vec<FileEntry>> {
     let excludes = build_exclude_set(&config.excludes)?;
     let paths = expand_all_inputs(context, config)?;
     let mut entries = process_paths(paths, context, config, excludes.as_ref())?;
@@ -24,10 +24,7 @@ pub fn collect_entries(context: &AppContext, config: &AggregateConfig) -> Result
 }
 
 /// Expands all input paths/globs and deduplicates them.
-fn expand_all_inputs(
-    context: &AppContext,
-    config: &AggregateConfig,
-) -> Result<BTreeSet<Utf8PathBuf>> {
+fn expand_all_inputs(context: &AppContext, config: &CopyConfig) -> Result<BTreeSet<Utf8PathBuf>> {
     let mut paths = BTreeSet::new();
 
     for input in &config.inputs {
@@ -44,7 +41,7 @@ fn expand_all_inputs(
 fn process_paths(
     paths: BTreeSet<Utf8PathBuf>,
     context: &AppContext,
-    config: &AggregateConfig,
+    config: &CopyConfig,
     excludes: Option<&GlobSet>,
 ) -> Result<Vec<FileEntry>> {
     let mut entries = Vec::new();
@@ -67,7 +64,7 @@ fn process_paths(
 fn collect_from_directory(
     dir: &Utf8Path,
     context: &AppContext,
-    config: &AggregateConfig,
+    config: &CopyConfig,
     excludes: Option<&GlobSet>,
     entries: &mut Vec<FileEntry>,
 ) -> Result<()> {
@@ -111,7 +108,7 @@ fn collect_from_directory(
 fn try_add_file_entry(
     path: &Utf8Path,
     context: &AppContext,
-    _config: &AggregateConfig,
+    _config: &CopyConfig,
     excludes: Option<&GlobSet>,
     entries: &mut Vec<FileEntry>,
 ) -> Result<()> {

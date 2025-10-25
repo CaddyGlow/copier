@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use ignore::WalkBuilder;
 
-use crate::config::AggregateConfig;
+use crate::config::CopyConfig;
 
 /// Configuration builder for setting up a directory walker with appropriate
 /// gitignore handling and custom ignore files.
@@ -12,8 +12,8 @@ pub struct WalkerConfigBuilder {
 }
 
 impl WalkerConfigBuilder {
-    /// Creates a walker configuration from an AggregateConfig.
-    pub fn from_config(root: &Utf8Path, config: &AggregateConfig) -> Self {
+    /// Creates a walker configuration from a CopyConfig.
+    pub fn from_config(root: &Utf8Path, config: &CopyConfig) -> Self {
         Self {
             root: root.to_owned(),
             respect_gitignore: config.respect_gitignore,

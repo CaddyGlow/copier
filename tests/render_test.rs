@@ -1,5 +1,5 @@
 use quickctx::aggregate::FileEntry;
-use quickctx::config::{AggregateConfig, FencePreference, OutputFormat};
+use quickctx::config::{CopyConfig, FencePreference, OutputFormat};
 use quickctx::render;
 
 fn make_entry(relative: &str, contents: &str, language: Option<&str>) -> FileEntry {
@@ -11,8 +11,8 @@ fn make_entry(relative: &str, contents: &str, language: Option<&str>) -> FileEnt
     }
 }
 
-fn make_config(format: OutputFormat, fence: FencePreference) -> AggregateConfig {
-    AggregateConfig {
+fn make_config(format: OutputFormat, fence: FencePreference) -> CopyConfig {
+    CopyConfig {
         inputs: vec![],
         output: None,
         format,
