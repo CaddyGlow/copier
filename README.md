@@ -330,7 +330,7 @@ Create a `quickctx.toml` file for project-specific settings:
 [general]
 verbose = 1
 
-[copy]
+[aggregate]
 # Copy mode settings
 paths = ["src/", "tests/"]
 format = "heading"
@@ -422,7 +422,7 @@ quickctx src/ tests/ -f comment -o share.md
 
 ### Example 2: AI-Assisted Development
 
-Export your codebase context for AI assistants:
+Copy your codebase context for AI assistants:
 
 ```bash
 # Copy code structure

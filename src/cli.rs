@@ -15,7 +15,7 @@ pub struct Cli {
     #[arg(short, long, action = ArgAction::Count)]
     pub verbose: u8,
 
-    /// Aggregation arguments (available by default)
+    /// Copy arguments (available by default)
     #[command(flatten)]
     pub aggregate: AggregateArgs,
 
@@ -28,17 +28,17 @@ pub enum Commands {
     /// Extract files from a markdown document
     Extract(ExtractArgs),
 
-    /// Explicit aggregate mode (equivalent to default invocation)
+    /// Explicit copy mode (equivalent to default invocation)
     Aggregate(AggregateArgs),
 }
 
 #[derive(Args, Debug, Default, Clone)]
 pub struct AggregateArgs {
-    /// Files, directories, or glob patterns to aggregate
+    /// Files, directories, or glob patterns to copy
     #[arg(value_name = "PATH", required = false)]
     pub paths: Vec<PathBuf>,
 
-    /// Write aggregated markdown to a file instead of stdout
+    /// Write copied markdown to a file instead of stdout
     #[arg(short, long, value_name = "FILE")]
     pub output: Option<PathBuf>,
 
