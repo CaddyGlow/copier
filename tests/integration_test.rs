@@ -8,7 +8,7 @@ use quickctx::config::{
     AppContext, ConflictStrategy, CopyConfig, FencePreference, InputSource, OutputFormat,
     PasteConfig,
 };
-use quickctx::{aggregate, extract};
+use quickctx::{copy, paste};
 
 struct TempDir {
     path: PathBuf,

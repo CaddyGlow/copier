@@ -1006,7 +1006,9 @@ fn heredoc_format_avoids_delimiter_conflicts() {
     let script = fs::read_to_string(output_path.as_std_path()).unwrap();
 
     // Should use a different delimiter than EOF
-    assert!(script.contains("cat > 'file.txt' << 'END'") ||
-            script.contains("cat > 'file.txt' << 'HEREDOC'") ||
-            script.contains("cat > 'file.txt' << 'CONTENT'"));
+    assert!(
+        script.contains("cat > 'file.txt' << 'END'")
+            || script.contains("cat > 'file.txt' << 'HEREDOC'")
+            || script.contains("cat > 'file.txt' << 'CONTENT'")
+    );
 }

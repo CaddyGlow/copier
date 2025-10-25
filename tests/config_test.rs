@@ -97,7 +97,7 @@ fn test_load_config_default_aggregate_mode() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -139,7 +139,7 @@ fn test_load_config_explicit_aggregate_mode() {
     let cli = Cli {
         config: None,
         verbose: 1,
-        aggregate: CopyArgs::default(),
+        copy: CopyArgs::default(),
         command: Some(Commands::Copy(CopyArgs {
             paths: vec![PathBuf::from("lib/")],
             output: Some(PathBuf::from("out.md")),
@@ -186,7 +186,7 @@ fn test_load_config_extract_mode_from_file() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs::default(),
+        copy: CopyArgs::default(),
         command: Some(Commands::Paste(PasteArgs {
             input: Some(input_path.clone()),
             output_dir: Some(PathBuf::from("extracted/")),
@@ -220,7 +220,7 @@ fn test_load_config_extract_mode_from_stdin() {
     let cli = Cli {
         config: None,
         verbose: 2,
-        aggregate: CopyArgs::default(),
+        copy: CopyArgs::default(),
         command: Some(Commands::Paste(PasteArgs {
             input: None,
             output_dir: None,
@@ -257,14 +257,14 @@ fn test_load_config_with_toml_file() {
 [general]
 verbose = 1
 
-[aggregate]
+[copy]
 paths = ["src/", "tests/"]
 format = "heading"
 fence = "backtick"
 respect_gitignore = false
 exclude = ["*.tmp"]
 
-[extractor]
+[paste]
 conflict = "overwrite"
 "#;
 
@@ -273,7 +273,7 @@ conflict = "overwrite"
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs::default(),
+        copy: CopyArgs::default(),
         command: None,
     };
 
@@ -309,7 +309,7 @@ fn test_load_config_cli_overrides_file() {
 
     // Create a quickctx.toml config file
     let config_content = r#"
-[aggregate]
+[copy]
 paths = ["from-file/"]
 format = "simple"
 "#;
@@ -319,7 +319,7 @@ format = "simple"
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("from-cli/")],
             format: Some(OutputFormat::Comment),
             output: None,
@@ -367,7 +367,7 @@ verbose = 3
     let cli = Cli {
         config: Some(custom_config_path),
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -402,7 +402,7 @@ fn test_load_config_invalid_toml() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -436,7 +436,7 @@ fn test_aggregate_config_with_multiple_ignore_files() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -473,7 +473,7 @@ fn test_aggregate_config_no_gitignore_flag() {
     let cli = Cli {
         config: None,
         verbose: 0,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,
@@ -517,7 +517,7 @@ verbose = 2
     let cli = Cli {
         config: None,
         verbose: 1,
-        aggregate: CopyArgs {
+        copy: CopyArgs {
             paths: vec![PathBuf::from("src/")],
             output: None,
             format: None,

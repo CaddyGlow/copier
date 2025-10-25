@@ -10,6 +10,7 @@ pub mod project_root;
 pub mod symbol_index;
 pub mod type_extractor;
 pub mod type_resolver;
+pub mod uri_utils;
 
 pub use cache::SymbolCache;
 pub use extractor::{SymbolInfo, extract_symbols};

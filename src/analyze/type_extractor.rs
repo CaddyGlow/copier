@@ -10,7 +10,7 @@ pub struct TypeReference {
     pub type_name: String,
     pub context: TypeContext,
     pub position: lsp_types::Position, // Position in the source file where the type is referenced
-    pub uri: lsp_types::Url,           // URI of the file containing the reference
+    pub uri: lsp_types::Uri,           // URI of the file containing the reference
     pub char_offset: Option<u32>,      // Character offset within the type annotation (for generics)
 }
 
@@ -41,7 +41,7 @@ impl TypeExtractor {
 
     /// Extract all type references from a symbol
     /// Uses documentSymbol children for parameters and calculates positions for types
-    pub fn extract_types(&self, symbol: &SymbolInfo, uri: &lsp_types::Url) -> Vec<TypeReference> {
+    pub fn extract_types(&self, symbol: &SymbolInfo, uri: &lsp_types::Uri) -> Vec<TypeReference> {
         use lsp_types::SymbolKind;
 
         let mut types = Vec::new();
@@ -223,7 +223,7 @@ impl TypeExtractor {
         &self,
         detail: &str,
         range: &lsp_types::Range,
-        uri: &lsp_types::Url,
+        uri: &lsp_types::Uri,
     ) -> Vec<TypeReference> {
         let mut types = Vec::new();
 

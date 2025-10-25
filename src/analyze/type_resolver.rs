@@ -2,6 +2,7 @@ use super::lsp_client::LspClient;
 use super::path_types::FilePath;
 use super::symbol_index::{SymbolIndex, SymbolLocation};
 use super::type_extractor::{TypeContext, TypeReference};
+use super::uri_utils::uri_to_file_path;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -97,8 +98,7 @@ impl<'a> TypeResolver<'a> {
                     // Extract location from GotoDefinitionResponse
                     if let Some((uri, range)) = Self::extract_first_location(response) {
                         return TypeResolution::External {
-                            file_path: uri
-                                .to_file_path()
+                            file_path: uri_to_file_path(&uri)
                                 .ok()
                                 .map(FilePath::from_absolute_unchecked),
                             line: Some(range.start.line),
@@ -146,7 +146,7 @@ impl<'a> TypeResolver<'a> {
     /// GotoDefinitionResponse can be Location, Location[], or LocationLink[]
     fn extract_first_location(
         response: lsp_types::GotoDefinitionResponse,
-    ) -> Option<(lsp_types::Url, lsp_types::Range)> {
+    ) -> Option<(lsp_types::Uri, lsp_types::Range)> {
         use lsp_types::GotoDefinitionResponse;
 
         match response {
@@ -231,7 +231,7 @@ mod tests {
                 line: 0,
                 character: 0,
             },
-            uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
+            uri: "file:///test.rs".parse::<lsp_types::Uri>().unwrap(),
             char_offset: None,
         }];
 
@@ -257,7 +257,7 @@ mod tests {
                 line: 0,
                 character: 0,
             },
-            uri: lsp_types::Url::parse("file:///test.rs").unwrap(),
+            uri: "file:///test.rs".parse::<lsp_types::Uri>().unwrap(),
             char_offset: None,
         }];
 

@@ -1,5 +1,6 @@
 use clap::Parser;
 use ignore::WalkBuilder;
+use quickctx::analyze::uri_utils::uri_from_file_path;
 use quickctx::analyze::{
     LspClient, LspServerConfig, OutputFormat, ProjectType, RelativePath, SymbolCache, SymbolIndex,
     SymbolInfo, TypeExtractor, TypeResolver, detect_project_root, extract_project_name,
@@ -96,7 +97,7 @@ fn populate_type_dependencies(
     symbols: &mut [SymbolInfo],
     type_extractor: &TypeExtractor,
     type_resolver: &TypeResolver,
-    uri: &lsp_types::Url,
+    uri: &lsp_types::Uri,
     client: &mut LspClient,
 ) {
     for symbol in symbols.iter_mut() {
@@ -204,10 +205,10 @@ fn fetch_external_symbols(
                         }
                     };
 
-                    let file_uri = match lsp_types::Url::from_file_path(&path) {
+                    let file_uri = match uri_from_file_path(&path) {
                         Ok(uri) => uri,
-                        Err(_) => {
-                            tracing::warn!("Failed to convert path to URI: {}", file_path);
+                        Err(e) => {
+                            tracing::warn!("Failed to convert path to URI: {} - {}", file_path, e);
                             if let Some(ref bar) = pb {
                                 bar.inc(1);
                             }
@@ -254,10 +255,10 @@ fn fetch_external_symbols(
                 }
             };
 
-            let file_uri = match lsp_types::Url::from_file_path(&path) {
+            let file_uri = match uri_from_file_path(&path) {
                 Ok(uri) => uri,
-                Err(_) => {
-                    tracing::warn!("Failed to convert path to URI: {}", file_path);
+                Err(e) => {
+                    tracing::warn!("Failed to convert path to URI: {} - {}", file_path, e);
                     if let Some(ref bar) = pb {
                         bar.inc(1);
                     }
@@ -441,13 +442,7 @@ impl ProcessingMode for SymbolMode {
                         let content = fs::read_to_string(&input_path)
                             .map_err(quickctx::error::QuickctxError::Io)?;
 
-                        let file_uri =
-                            lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                                quickctx::error::QuickctxError::Io(std::io::Error::new(
-                                    std::io::ErrorKind::InvalidInput,
-                                    "Invalid file path",
-                                ))
-                            })?;
+                        let file_uri = uri_from_file_path(&input_path)?;
 
                         tracing::info!("Opening document: {}", input.display());
                         client.did_open(&input_path, &content)?;
@@ -472,12 +467,7 @@ impl ProcessingMode for SymbolMode {
                 let content =
                     fs::read_to_string(&input_path).map_err(quickctx::error::QuickctxError::Io)?;
 
-                let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                    quickctx::error::QuickctxError::Io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Invalid file path",
-                    ))
-                })?;
+                let file_uri = uri_from_file_path(&input_path)?;
 
                 tracing::info!("Opening document: {}", input.display());
                 client.did_open(&input_path, &content)?;
@@ -511,12 +501,7 @@ impl ProcessingMode for SymbolMode {
 
         for (input_path, symbols) in &all_file_symbols {
             pb2.set_message(format!("Resolving types\n{}", input_path.display()));
-            let file_uri = lsp_types::Url::from_file_path(input_path).map_err(|_| {
-                quickctx::error::QuickctxError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid file path for URI conversion",
-                ))
-            })?;
+            let file_uri = uri_from_file_path(input_path)?;
 
             let mut mutable_symbols = symbols.clone();
             populate_type_dependencies(
@@ -664,14 +649,12 @@ impl ProcessingMode for DiagnosticsMode {
                 .canonicalize()
                 .map_err(quickctx::error::QuickctxError::Io)?;
 
-            let file_uri = lsp_types::Url::from_file_path(&input_path).map_err(|_| {
-                quickctx::error::QuickctxError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid file path",
-                ))
-            })?;
+            let file_uri = uri_from_file_path(&input_path)?;
 
-            let diagnostics = diagnostics_map.get(&file_uri).cloned().unwrap_or_default();
+            let diagnostics = diagnostics_map
+                .get(file_uri.as_str())
+                .cloned()
+                .unwrap_or_default();
 
             tracing::info!(
                 "Found {} diagnostic(s) in {}",

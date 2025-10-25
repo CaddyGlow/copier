@@ -1,6 +1,7 @@
 use crate::analyze::jsonrpc::JsonRpcTransport;
 use crate::analyze::lsp_config::get_language_id;
 use crate::analyze::project_root::ProjectType;
+use crate::analyze::uri_utils::uri_from_file_path;
 use crate::error::{QuickctxError, Result};
 use lsp_types::*;
 use std::path::Path;
@@ -9,7 +10,7 @@ use std::process::{Child, Command, Stdio};
 pub struct LspClient {
     transport: JsonRpcTransport,
     child_process: Option<Child>,
-    root_uri: Url,
+    root_uri: Uri,
     project_type: ProjectType,
     initialized: bool,
 }
@@ -79,12 +80,7 @@ impl LspClient {
 
         let transport = JsonRpcTransport::new(stdin, stdout);
 
-        let root_uri = Url::from_file_path(root_path).map_err(|_| {
-            QuickctxError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid root path",
-            ))
-        })?;
+        let root_uri = uri_from_file_path(root_path)?;
 
         Ok(Self {
             transport,
@@ -174,12 +170,7 @@ impl LspClient {
             )));
         }
 
-        let uri = Url::from_file_path(file_path).map_err(|_| {
-            QuickctxError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid file path",
-            ))
-        })?;
+        let uri = uri_from_file_path(file_path)?;
 
         let params = DidOpenTextDocumentParams {
             text_document: TextDocumentItem {
@@ -206,7 +197,7 @@ impl LspClient {
     }
 
     /// Get document symbols with retry logic
-    pub fn document_symbols(&mut self, uri: &Url) -> Result<DocumentSymbolResponse> {
+    pub fn document_symbols(&mut self, uri: &Uri) -> Result<DocumentSymbolResponse> {
         // Retry several times with delays to give LSP time to process the document
         // LSP servers like rust-analyzer may need time to build the crate graph
         let max_retries = 6;
@@ -307,7 +298,7 @@ impl LspClient {
     }
 
     /// Get hover information at a position
-    pub fn hover(&mut self, uri: &Url, position: Position) -> Result<Option<Hover>> {
+    pub fn hover(&mut self, uri: &Uri, position: Position) -> Result<Option<Hover>> {
         let params = HoverParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri: uri.clone() },
@@ -411,7 +402,7 @@ impl LspClient {
     /// Get type definition at a position
     pub fn type_definition(
         &mut self,
-        uri: &Url,
+        uri: &Uri,
         position: Position,
     ) -> Result<Option<GotoDefinitionResponse>> {
         if !self.initialized {
@@ -518,7 +509,7 @@ impl LspClient {
         timeout_ms: u64,
         expected_file_count: Option<usize>,
         progress_display: Option<&crate::analyze::progress::ProgressDisplay>,
-    ) -> Result<std::collections::HashMap<Url, Vec<lsp_types::Diagnostic>>> {
+    ) -> Result<std::collections::HashMap<String, Vec<lsp_types::Diagnostic>>> {
         if let Some(count) = expected_file_count {
             tracing::info!(
                 "Waiting {}ms for diagnostics to arrive (expecting {} file(s))...",
@@ -622,17 +613,10 @@ impl LspClient {
             );
         }
 
-        // Convert String URIs to Url type
-        let mut result = std::collections::HashMap::new();
-        for (uri_str, diagnostics) in diagnostics_by_uri {
-            if let Ok(url) = Url::parse(&uri_str) {
-                result.insert(url, diagnostics);
-            } else {
-                tracing::warn!("Failed to parse URI: {}", uri_str);
-            }
-        }
-
-        Ok(result)
+        // Return diagnostics map with String URIs as keys
+        // Note: We use String instead of Uri as HashMap keys because Uri has interior
+        // mutability (contains Cell), making it unsuitable for use as a hash key
+        Ok(diagnostics_by_uri)
     }
 
     /// Wait for LSP server to complete initial indexing

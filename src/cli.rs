@@ -30,6 +30,9 @@ pub enum Commands {
 
     /// Explicit copy mode (equivalent to default invocation)
     Copy(CopyArgs),
+
+    /// Check for and install updates
+    Update(UpdateArgs),
 }
 
 #[derive(Args, Debug, Default, Clone)]
@@ -76,4 +79,15 @@ pub struct PasteArgs {
     /// Conflict handling strategy
     #[arg(long = "conflict", value_enum)]
     pub conflict: Option<ConflictStrategy>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct UpdateArgs {
+    /// Only check for updates without installing
+    #[arg(long = "check-only", action = ArgAction::SetTrue)]
+    pub check_only: bool,
+
+    /// Install update without prompting for confirmation
+    #[arg(short = 'y', long = "yes", action = ArgAction::SetTrue)]
+    pub yes: bool,
 }

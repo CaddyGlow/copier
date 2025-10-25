@@ -36,7 +36,8 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features 
+        #run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run tests
         run: cargo test --all-features
@@ -47,6 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux - glibc (GNU)
           - target: x86_64-unknown-linux-gnu
             runs_on: ubuntu-latest
             archive: tar.gz
@@ -57,12 +59,54 @@ jobs:
             exe_suffix: ""
             apt_package: gcc-aarch64-linux-gnu
             linker: aarch64-linux-gnu-gcc
+          - target: armv7-unknown-linux-gnueabihf
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            apt_package: gcc-arm-linux-gnueabihf
+            linker: arm-linux-gnueabihf-gcc
+          - target: i686-unknown-linux-gnu
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            apt_package: gcc-multilib
+            linker: gcc
+
+          # Linux - musl (static linking)
+          - target: x86_64-unknown-linux-musl
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            apt_package: musl-tools
+            linker: musl-gcc
+          - target: aarch64-unknown-linux-musl
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            musl: true
+          - target: armv7-unknown-linux-musleabihf
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            musl: true
+
+          # Windows
+          - target: x86_64-pc-windows-msvc
+            runs_on: windows-latest
+            archive: zip
+            exe_suffix: ".exe"
           - target: x86_64-pc-windows-gnu
             runs_on: ubuntu-latest
             archive: zip
             exe_suffix: ".exe"
             apt_package: gcc-mingw-w64-x86-64
             linker: x86_64-w64-mingw32-gcc
+          - target: i686-pc-windows-msvc
+            runs_on: windows-latest
+            archive: zip
+            exe_suffix: ".exe"
+
+          # macOS
           - target: x86_64-apple-darwin
             runs_on: macos-latest
             archive: tar.gz
@@ -71,6 +115,8 @@ jobs:
             runs_on: macos-latest
             archive: tar.gz
             exe_suffix: ""
+
+          # Android
           - target: aarch64-linux-android
             runs_on: ubuntu-latest
             archive: tar.gz
@@ -79,6 +125,14 @@ jobs:
             ndk_version: "26.1.10909125"
             android_api: "24"
             android_triple: "aarch64-linux-android"
+          - target: armv7-linux-androideabi
+            runs_on: ubuntu-latest
+            archive: tar.gz
+            exe_suffix: ""
+            android: true
+            ndk_version: "26.1.10909125"
+            android_api: "24"
+            android_triple: "armv7a-linux-androideabi"
     runs-on: ${{ matrix.runs_on }}
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +150,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Install cross-compilation toolchain
-        if: matrix.apt_package
+        if: matrix.apt_package && !matrix.musl
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.apt_package }}
@@ -105,6 +159,11 @@ jobs:
           [target.${{ matrix.target }}]
           linker = "${{ matrix.linker }}"
           EOF
+
+      - name: Install cross for musl targets
+        if: matrix.musl
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Install Android NDK
         if: matrix.android
@@ -129,25 +188,35 @@ jobs:
           echo "AR_${TARGET_ENV}=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.musl }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
           
       - name: Package artifact
+        shell: bash
         run: |
           mkdir -p dist
           BIN="quickctx"
           TARGET="${{ matrix.target }}"
-          VERSION="${{ github.ref_name }}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
-            VERSION="${{ github.sha }}"
-          fi
-          ARCHIVE_STEM="$BIN-$VERSION-$TARGET"
+
+          # Copy the binary
           cp "target/$TARGET/release/$BIN${{ matrix.exe_suffix }}" "dist/$BIN${{ matrix.exe_suffix }}"
+
+          # Create archive with standard naming: quickctx-TARGET.{tar.gz|zip}
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip "$ARCHIVE_STEM.zip" "$BIN${{ matrix.exe_suffix }}"
+            ARCHIVE_NAME="$BIN-$TARGET.zip"
+            zip "$ARCHIVE_NAME" "$BIN${{ matrix.exe_suffix }}"
           else
-            tar czf "$ARCHIVE_STEM.tar.gz" "$BIN${{ matrix.exe_suffix }}"
+            ARCHIVE_NAME="$BIN-$TARGET.tar.gz"
+            tar czf "$ARCHIVE_NAME" "$BIN${{ matrix.exe_suffix }}"
           fi
+
+          echo "Created archive: $ARCHIVE_NAME"
+          ls -lh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

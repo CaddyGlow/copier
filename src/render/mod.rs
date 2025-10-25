@@ -44,10 +44,10 @@ fn render_heredoc(entry: &FileEntry, buffer: &mut String) -> Result<()> {
     let output_path = compute_heredoc_path(&entry.relative);
 
     // Add directory creation if the file is in a subdirectory
-    if let Some(parent) = std::path::Path::new(output_path.as_str()).parent() {
-        if parent != std::path::Path::new("") {
-            buffer.push_str(&format!("mkdir -p '{}'\n", parent.display()));
-        }
+    if let Some(parent) = std::path::Path::new(output_path.as_str()).parent()
+        && parent != std::path::Path::new("")
+    {
+        buffer.push_str(&format!("mkdir -p '{}'\n", parent.display()));
     }
 
     // Generate heredoc command
@@ -72,18 +72,12 @@ fn compute_heredoc_path(relative: &camino::Utf8Path) -> String {
 
     // If it's an absolute path, use just the filename
     if path_str.starts_with('/') {
-        return relative
-            .file_name()
-            .unwrap_or("output")
-            .to_string();
+        return relative.file_name().unwrap_or("output").to_string();
     }
 
     // If it contains ../ (going up), use just the filename
     if path_str.contains("../") || path_str.starts_with("..") {
-        return relative
-            .file_name()
-            .unwrap_or("output")
-            .to_string();
+        return relative.file_name().unwrap_or("output").to_string();
     }
 
     // Otherwise, it's a proper relative path within cwd, use it as-is

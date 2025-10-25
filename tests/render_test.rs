@@ -1,5 +1,5 @@
-use quickctx::aggregate::FileEntry;
 use quickctx::config::{CopyConfig, FencePreference, OutputFormat};
+use quickctx::copy::FileEntry;
 use quickctx::render;
 
 fn make_entry(relative: &str, contents: &str, language: Option<&str>) -> FileEntry {

@@ -6,6 +6,7 @@ pub mod error;
 pub mod paste;
 pub mod render;
 pub mod telemetry;
+pub mod update;
 pub mod utils;
 
 use config::ModeConfig;
@@ -17,8 +18,14 @@ pub fn run(cli: Cli) -> Result<()> {
     let runtime = config::load(&cli)?;
     telemetry::init(runtime.context.verbosity)?;
 
+    // Check for updates in the background (non-blocking, only for non-update commands)
+    if !matches!(runtime.mode, ModeConfig::Update(_)) {
+        let _ = update::check_for_update_background();
+    }
+
     match runtime.mode {
         ModeConfig::Copy(cfg) => copy::run(&runtime.context, cfg),
         ModeConfig::Paste(cfg) => paste::run(&runtime.context, cfg),
+        ModeConfig::Update(cfg) => update::run(&runtime.context, cfg),
     }
 }

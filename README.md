@@ -40,19 +40,47 @@ Quickctx does all of this in a single command.
 
 ## Installation
 
-### Using Install Script (Recommended)
+### Package Managers (Recommended)
 
-**Unix-like systems (Linux, macOS, Android):**
+**Homebrew (macOS/Linux):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CaddyGlow/quickctx/main/scripts/install.sh | bash
+brew tap CaddyGlow/packages
+brew install quickctx
+```
+
+**Scoop (Windows):**
+```powershell
+scoop bucket add caddyglow https://github.com/CaddyGlow/homebrew-packages
+scoop install quickctx
+```
+
+See [INSTALL.md](INSTALL.md) for detailed installation instructions and other methods.
+
+### Using Install Script
+
+**Unix-like systems (Linux, macOS, Android/Termux):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/CaddyGlow/quickctx/main/install.sh | bash
+```
+
+Or with wget:
+```bash
+wget -qO- https://raw.githubusercontent.com/CaddyGlow/quickctx/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/CaddyGlow/quickctx/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/CaddyGlow/quickctx/main/install.ps1 | iex
 ```
 
-For custom installation options, see [scripts/install.sh](scripts/install.sh) or [scripts/install.ps1](scripts/install.ps1).
+**Custom installation directory:**
+```bash
+# Unix-like systems - set QUICKCTX_INSTALL_DIR
+export QUICKCTX_INSTALL_DIR="$HOME/bin"
+curl -fsSL https://raw.githubusercontent.com/CaddyGlow/quickctx/main/install.sh | bash
+```
+
+For manual installation or troubleshooting, see [install.sh](install.sh) or [install.ps1](install.ps1).
 
 ### From Cargo
 
@@ -78,60 +106,73 @@ The binaries will be available at:
 - `target/release/quickctx`
 - `target/release/quickctx-analyze`
 
+### Updating
+
+Quickctx includes a built-in self-update feature:
+
+```bash
+# Check for updates
+quickctx update --check-only
+
+# Install latest version (interactive)
+quickctx update
+
+# Install without confirmation
+quickctx update --yes
+```
+
+Quickctx automatically checks for updates every 7 days and notifies you if a new version is available.
+
 ## Quick Start
 
-### Copy Files to Markdown
+### Typical LLM Workflow
 
-Convert files to markdown:
-
+**1. Extract files to clipboard:**
 ```bash
-# Copy specific files
-quickctx file1.rs file2.rs
+# Get all source files, copy output to clipboard
+quickctx src/ | pbcopy  # macOS
+quickctx src/ | xclip -selection clipboard  # Linux
+quickctx src/ | clip  # Windows
 
-# Copy entire directory
-quickctx src/
-
-# Use glob patterns
-quickctx "src/**/*.rs"
-
-# Output to file
-quickctx src/ -o project.md
+# Or save to file first
+quickctx src/ -o context.md
 ```
 
-### Paste Files from Markdown
+**2. Paste into your LLM conversation** (ChatGPT, Claude, etc.)
 
-Convert markdown back to files:
-
+**3. Get generated/modified code back:**
 ```bash
-# Paste from file
-quickctx paste project.md
-
-# Paste from stdin
-cat project.md | quickctx paste
-
-# Paste to specific directory
-quickctx paste project.md -o restored/
+# Paste the LLM's response back to files
+quickctx paste response.md
 ```
 
-### Analyze Code
+### Common Commands
 
-Extract symbols and documentation using LSP:
-
+**Copy specific files:**
 ```bash
-# Analyze a single file (auto-detects project and LSP server)
-quickctx-analyze src/main.rs
+quickctx file1.rs file2.rs  # Outputs to stdout
+```
 
-# Analyze multiple files
-quickctx-analyze src/cli.rs src/lib.rs src/main.rs
+**Copy entire directory:**
+```bash
+quickctx src/  # Respects .gitignore by default
+```
 
-# Output to file
-quickctx-analyze src/lib.rs -o analysis.md
+**Copy with glob patterns:**
+```bash
+quickctx "src/**/*.rs"  # Just Rust files
+```
 
-# JSON format for programmatic use
-quickctx-analyze src/main.rs --format json
+**Choose output format:**
+```bash
+quickctx src/ -f heading  # Include headings with file paths
+quickctx src/ -f comment  # Paths as comments in code blocks
+```
 
-# Compact format for quick overview
-quickctx-analyze src/main.rs --format compact
+**Analyze code symbols:**
+```bash
+# Get function signatures, types, and documentation
+quickctx-analyze src/main.rs src/lib.rs
 ```
 
 ## Usage
@@ -424,24 +465,33 @@ You need the appropriate LSP server installed for your language:
 
 ## Examples
 
-### Example 1: Share Code Snippets
+### Example 1: Working with LLMs
 
-Copy your project files to share with others:
+Get your code into an LLM conversation:
+
+```bash
+# Quick: pipe directly to clipboard
+quickctx src/ | pbcopy
+
+# Or save to file and review first
+quickctx src/ -f heading -o context.md
+
+# Include specific files only
+quickctx src/main.rs src/lib.rs src/config.rs | pbcopy
+
+# Get detailed symbol analysis for complex refactoring
+quickctx-analyze src/ -o symbols.md
+```
+
+Then paste into ChatGPT/Claude with a prompt like:
+> "Here's my codebase. Can you help me refactor the error handling to use a custom Result type?"
+
+### Example 2: Share Code Snippets
+
+Share project files with colleagues or in bug reports:
 
 ```bash
 quickctx src/ tests/ -f comment -o share.md
-```
-
-### Example 2: AI-Assisted Development
-
-Copy your codebase context for AI assistants:
-
-```bash
-# Copy code structure
-quickctx "src/**/*.rs" --format heading -o context.md
-
-# Analyze symbols for detailed context
-quickctx-analyze src/main.rs src/lib.rs -o symbols.md
 ```
 
 ### Example 3: Documentation
@@ -496,15 +546,14 @@ find src -name "*.rs" -exec quickctx-analyze {} -o {}.analysis.md \;
 
 ## Use Cases
 
-- **Code Reviews**: Share code context easily with reviewers
-- **AI Assistants**: Provide comprehensive codebase context to LLMs
-- **Documentation**: Embed live code examples and auto-extract API docs
-- **Teaching**: Create code tutorials with explanations
-- **Migration**: Move code between projects
-- **Templates**: Distribute project templates as markdown
-- **Bug Reports**: Include minimal reproducible examples
-- **Code Analysis**: Programmatic access to code structure via JSON/CSV output
-- **Project Exploration**: Understand unfamiliar codebases quickly
+- **Working with LLMs**: The primary use case - quickly copy your codebase into ChatGPT, Claude, or other AI assistants for code reviews, debugging, refactoring, and feature development
+- **Code Reviews**: Share multi-file context with reviewers without juggling multiple attachments
+- **Bug Reports**: Create minimal reproducible examples with all necessary files in one block
+- **Documentation**: Embed live code examples that can be extracted and run
+- **Project Exploration**: Quickly understand unfamiliar codebases by analyzing symbols and structure
+- **Templates**: Distribute project scaffolds as single markdown files
+- **Teaching**: Create code tutorials with complete, executable examples
+- **Migration**: Move code snippets between projects with full context
 
 ## Building from Source
 

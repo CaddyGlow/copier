@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 use strum::{Display, EnumString};
 
-use crate::cli::{Cli, Commands, CopyArgs, PasteArgs};
+use crate::cli::{Cli, Commands, CopyArgs, PasteArgs, UpdateArgs};
 use crate::error::{QuickctxError, Result};
 
 #[derive(
@@ -62,6 +62,7 @@ pub struct AppContext {
 pub enum ModeConfig {
     Copy(CopyConfig),
     Paste(PasteConfig),
+    Update(UpdateConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -97,6 +98,12 @@ pub struct PasteConfig {
     pub source: InputSource,
     pub output_dir: Utf8PathBuf,
     pub conflict: ConflictStrategy,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateConfig {
+    pub check_only: bool,
+    pub yes: bool,
 }
 
 // ============================================================================
@@ -265,6 +272,10 @@ pub fn load(cli: &Cli) -> Result<RuntimeConfig> {
             let cfg = build_paste_config(args, &file_config, &context)?;
             ModeConfig::Paste(cfg)
         }
+        Some(Commands::Update(args)) => {
+            let cfg = build_update_config(args);
+            ModeConfig::Update(cfg)
+        }
         None => {
             let cfg = build_copy_config(None, &cli.copy, &file_config)?;
             ModeConfig::Copy(cfg)
@@ -313,6 +324,13 @@ fn build_paste_config(
         .build();
 
     Ok(config)
+}
+
+fn build_update_config(args: &UpdateArgs) -> UpdateConfig {
+    UpdateConfig {
+        check_only: args.check_only,
+        yes: args.yes,
+    }
 }
 
 fn parse_file_config(path: &Utf8Path) -> Result<FileConfig> {

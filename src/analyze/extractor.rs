@@ -17,7 +17,7 @@ pub struct SymbolInfo {
 }
 
 /// Extract symbols and their documentation from a file using LSP
-pub fn extract_symbols(client: &mut LspClient, uri: &Url) -> Result<Vec<SymbolInfo>> {
+pub fn extract_symbols(client: &mut LspClient, uri: &Uri) -> Result<Vec<SymbolInfo>> {
     let symbol_response = client.document_symbols(uri)?;
 
     let mut symbols = Vec::new();
@@ -57,7 +57,7 @@ pub fn extract_symbols(client: &mut LspClient, uri: &Url) -> Result<Vec<SymbolIn
 /// Convert DocumentSymbol to SymbolInfo, preserving hierarchy
 fn convert_document_symbol(
     client: &mut LspClient,
-    uri: &Url,
+    uri: &Uri,
     symbol: DocumentSymbol,
 ) -> Result<SymbolInfo> {
     let hover = client

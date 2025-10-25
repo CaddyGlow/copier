@@ -580,9 +580,9 @@ mod tests {
             cache.save_symbols(file, symbols.clone(), ProjectType::Rust)?;
 
             // Verify all previously cached files are still accessible
-            for j in 0..=i {
+            for (j, file) in files.iter().enumerate().take(i + 1) {
                 assert!(
-                    cache.get_symbols(&files[j], ProjectType::Rust)?.is_some(),
+                    cache.get_symbols(file, ProjectType::Rust)?.is_some(),
                     "File {} should be cached after caching file {}",
                     j,
                     i

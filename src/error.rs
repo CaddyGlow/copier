@@ -29,4 +29,7 @@ pub enum QuickctxError {
 
     #[error("failed to initialize telemetry: {0}")]
     TelemetryInit(String),
+
+    #[error("self-update error: {0}")]
+    SelfUpdate(String),
 }
