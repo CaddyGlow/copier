@@ -7,8 +7,13 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      targets:
+        description: 'JSON array of targets to build (leave empty for all default targets)'
+        required: false
+        type: string
+        default: ''
       force_release:
-        description: 'Force a release (even without a tag)'
+        description: 'Force a release even without a tag'
         required: false
         type: boolean
         default: false
@@ -24,4 +29,5 @@ jobs:
       assets: '["README.md"]'
       test_command: 'cargo test --all-features'
       clippy_args: '--all-targets --all-features'
-      force_release: ${{ github.event.inputs.force_release == 'true' }}
+      targets: ${{ inputs.targets || '' }}
+      force_release: ${{ inputs.force_release || false }}
